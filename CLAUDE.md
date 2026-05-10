@@ -1,0 +1,50 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Commands
+
+This project uses [just](https://github.com/casey/just) as a task runner:
+
+```sh
+just run          # build (release) and run with full backtrace
+just build-debug  # debug build
+just build-release # release build (default: just)
+just check        # clippy with pedantic warnings
+just check-json   # clippy with JSON output (for IDEs/LSP)
+just install      # install binary + desktop/appstream/icon files
+just clean        # cargo clean
+```
+
+No test suite is present in the initial scaffold.
+
+## Architecture
+
+This is a COSMIC Desktop application written in Rust using [libcosmic](https://github.com/pop-os/libcosmic), which wraps [iced](https://github.com/iced-rs/iced) with COSMIC-specific widgets and conventions.
+
+The app follows the elm-style architecture that iced imposes:
+
+- **`src/main.rs`** — entry point: initializes i18n, configures window size limits, launches the iced runtime with `AppModel`.
+- **`src/app.rs`** — the entire UI and business logic. `AppModel` implements `cosmic::Application`, which requires:
+  - `view()` — renders the current page based on `nav` active selection.
+  - `update()` — handles all `Message` variants, mutates state, optionally returns async `Task`s.
+  - `subscription()` — declares long-running background streams (e.g. the per-second ticker, config file watcher).
+  - `header_start()` / `nav_model()` / `context_drawer()` — COSMIC shell integration points.
+- **`src/config.rs`** — `Config` struct derived with `CosmicConfigEntry`; persisted via `cosmic-config` (XDG). Bump `#[version = N]` when adding fields to trigger migration.
+- **`src/i18n.rs`** — loads Fluent translations embedded at compile time via `rust-embed`. The `fl!("message-id")` macro (and `fl!("message-id", key = val)` for parameterized strings) is available everywhere via `use crate::fl`.
+
+### Localization
+
+Fluent `.ftl` files live in `i18n/<lang>/cosmic_app_switcher.ftl`. English (`i18n/en/`) is the fallback defined in `i18n.toml`. Add a new language by copying the `en` directory and renaming it to the ISO 639-1 code.
+
+### Packaging
+
+For distribution builds: vendor dependencies first (`just vendor`), then build offline (`just build-vendored`). Override install paths with `rootdir` and `prefix` variables:
+
+```sh
+just rootdir=debian/cosmic-app-switcher prefix=/usr install
+```
+
+## Dependency notes
+
+`libcosmic` is pulled directly from git (`pop-os/libcosmic`). To test against a local clone, uncomment the `[patch]` block at the bottom of `Cargo.toml`.
