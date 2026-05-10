@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Cosmic App Switcher
+Comment=An app switcher for COSMIC Desktop
+Type=Application
+Icon=com.github.riverfr0zen.cosmic-app-template
+Exec=cosmic-app-switcher %F
+Terminal=false
+StartupNotify=true
+Categories=COSMIC
+Keywords=COSMIC
+MimeType=
