@@ -5,12 +5,10 @@ use crate::fl;
 use cosmic::app::context_drawer;
 use cosmic::cosmic_config::{self, CosmicConfigEntry};
 use cosmic::iced::alignment::{Horizontal, Vertical};
-use cosmic::iced::{Alignment, Length, Subscription, futures};
+use cosmic::iced::{Alignment, Length, Subscription};
 use cosmic::prelude::*;
 use cosmic::widget::{self, about::About, icon, menu, nav_bar};
-use futures::SinkExt;
 use std::collections::HashMap;
-use std::time::Duration;
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 const APP_ICON: &[u8] = include_bytes!("../resources/icons/hicolor/scalable/apps/icon.svg");
@@ -30,10 +28,8 @@ pub struct AppModel {
     key_binds: HashMap<menu::KeyBind, MenuAction>,
     /// Configuration data that persists between application runs.
     config: Config,
-    /// Time active
-    time: u32,
-    /// Toggle the watch subscription
-    watch_is_active: bool,
+    /// Windows open on the current workspace
+    windows: Vec<crate::wayland::WindowInfo>,
 }
 
 /// Messages emitted by the application and its widgets.
@@ -41,9 +37,8 @@ pub struct AppModel {
 pub enum Message {
     LaunchUrl(String),
     ToggleContextPage(ContextPage),
-    ToggleWatch,
     UpdateConfig(Config),
-    WatchTick(u32),
+    WindowsUpdated(Vec<crate::wayland::WindowInfo>),
 }
 
 /// Create a COSMIC application from the app model
@@ -120,8 +115,7 @@ impl cosmic::Application for AppModel {
                     }
                 })
                 .unwrap_or_default(),
-            time: 0,
-            watch_is_active: false,
+            windows: Vec::new(),
         };
 
         // Create a startup command that sets the window title.
@@ -171,27 +165,22 @@ impl cosmic::Application for AppModel {
         let space_s = cosmic::theme::spacing().space_s;
         let content: Element<_> = match self.nav.active_data::<Page>().unwrap() {
             Page::Page1 => {
-                let header = widget::row::with_capacity(2)
-                    .push(widget::text::title1(fl!("welcome")))
-                    .push(widget::text::title3(fl!("page-id", num = 1)))
-                    .align_y(Alignment::End)
-                    .spacing(space_s);
+                let header = widget::text::title3("Open windows on this workspace");
 
-                let counter_label = ["Watch: ", self.time.to_string().as_str()].concat();
-                let section = cosmic::widget::settings::section().add(
-                    cosmic::widget::settings::item::builder(counter_label).control(
-                        widget::button::text(if self.watch_is_active {
-                            "Stop"
-                        } else {
-                            "Start"
-                        })
-                        .on_press(Message::ToggleWatch),
-                    ),
-                );
+                let mut list = widget::column::with_capacity(self.windows.len().max(1));
+                if self.windows.is_empty() {
+                    list = list.push(widget::text("(none yet — waiting for Wayland events)"));
+                } else {
+                    for w in &self.windows {
+                        list = list.push(
+                            widget::text(format!("{} — {}", w.title, w.app_id))
+                        );
+                    }
+                }
 
                 widget::column::with_capacity(2)
                     .push(header)
-                    .push(section)
+                    .push(list.spacing(space_s))
                     .spacing(space_s)
                     .height(Length::Fill)
                     .into()
@@ -244,7 +233,7 @@ impl cosmic::Application for AppModel {
     /// indefinitely.
     fn subscription(&self) -> Subscription<Self::Message> {
         // Add subscriptions which are always active.
-        let mut subscriptions = vec![
+        let subscriptions = vec![
             // Watch for application configuration changes.
             self.core()
                 .watch_config::<Config>(Self::APP_ID)
@@ -255,23 +244,9 @@ impl cosmic::Application for AppModel {
 
                     Message::UpdateConfig(update.config)
                 }),
+            // Listen for open windows on the current workspace.
+            crate::wayland::subscribe().map(Message::WindowsUpdated),
         ];
-
-        // Conditionally enables a timer that emits a message every second.
-        if self.watch_is_active {
-            subscriptions.push(Subscription::run(|| {
-                cosmic::iced::stream::channel(1, |mut emitter: futures::channel::mpsc::Sender<_>| async move {
-                    let mut time = 1;
-                    let mut interval = tokio::time::interval(Duration::from_secs(1));
-
-                    loop {
-                        interval.tick().await;
-                        _ = emitter.send(Message::WatchTick(time)).await;
-                        time += 1;
-                    }
-                })
-            }));
-        }
 
         Subscription::batch(subscriptions)
     }
@@ -282,14 +257,6 @@ impl cosmic::Application for AppModel {
     /// on the application's async runtime.
     fn update(&mut self, message: Self::Message) -> Task<cosmic::Action<Self::Message>> {
         match message {
-            Message::WatchTick(time) => {
-                self.time = time;
-            }
-
-            Message::ToggleWatch => {
-                self.watch_is_active = !self.watch_is_active;
-            }
-
             Message::ToggleContextPage(context_page) => {
                 if self.context_page == context_page {
                     // Close the context drawer if the toggled context page is the same.
@@ -311,6 +278,10 @@ impl cosmic::Application for AppModel {
                     eprintln!("failed to open {url:?}: {err}");
                 }
             },
+
+            Message::WindowsUpdated(windows) => {
+                self.windows = windows;
+            }
         }
         Task::none()
     }
