@@ -47,6 +47,25 @@ For distribution builds: vendor dependencies first (`just vendor`), then build o
 just rootdir=debian/cosmic-app-switcher prefix=/usr install
 ```
 
+### Wayland compositor integration (`src/wayland.rs`)
+
+libcosmic owns its own Wayland connection for the UI. Accessing additional compositor protocols (window list, workspaces) requires a **separate** Wayland connection that runs on a dedicated OS thread with a `calloop` event loop, communicating back to the app via a tokio `mpsc` channel bridged into an iced `Subscription`. See `src/wayland.rs` for the established pattern.
+
+Key crates for this (already in `Cargo.toml`):
+- `cctk` — package alias for `cosmic-client-toolkit`; provides `ToplevelInfoHandler`, `WorkspaceHandler`, and their delegate macros. Use as `cctk::toplevel_info::...` / `cctk::workspace::...` in Rust code.
+- `calloop` + `calloop-wayland-source` — event loop for the listener thread.
+- `cosmic-protocols` — lower-level generated bindings; usually accessed transitively through `cctk`.
+
+**Known API quirks:**
+- `wayland-scanner` generates bitflag enum constants using `snake_to_camel`, not `SCREAMING_SNAKE_CASE`. For example, `<entry name="active" />` becomes `State::Active`, not `State::ACTIVE`.
+- `cosmic::widget::settings::item::builder(label).description(text)` does **not** implement `IntoListItem` and cannot be passed to `section.add()`. Use the bare `builder(label)` for settings rows, or a plain `widget::text` column for multi-field display.
+- `futures::SinkExt` is not a direct dependency; use `cosmic::iced::futures::SinkExt` instead.
+- When annotating the `stream::channel` closure, the sender type is `cosmic::iced::futures::channel::mpsc::Sender<T>`.
+
+Reference implementations in the COSMIC ecosystem:
+- `cosmic-applets/cosmic-applet-workspaces` — channel + subscription bridge pattern
+- `cosmic-workspaces-epoch` — full `ToplevelInfoHandler` + `WorkspaceHandler` dispatch example
+
 ## Dependency notes
 
 `libcosmic` is pulled directly from git (`pop-os/libcosmic`). To test against a local clone, uncomment the `[patch]` block at the bottom of `Cargo.toml`.
