@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::time::Instant;
 
 use calloop::EventLoop;
 use calloop_wayland_source::WaylandSource;
@@ -11,6 +12,7 @@ use cctk::wayland_client::globals::registry_queue_init;
 use cctk::wayland_client::protocol::wl_output;
 use cctk::wayland_client::{Connection, QueueHandle};
 use cctk::wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_handle_v1;
+use cosmic_protocols::toplevel_info::v1::client::zcosmic_toplevel_handle_v1;
 use cctk::wayland_protocols::ext::workspace::v1::client::ext_workspace_handle_v1;
 use cctk::workspace::{WorkspaceHandler, WorkspaceState};
 use cosmic::iced::Subscription;
@@ -29,6 +31,7 @@ struct WaylandState {
     toplevel_info_state: ToplevelInfoState,
     workspace_state: WorkspaceState,
     sender: mpsc::Sender<Vec<WindowInfo>>,
+    last_activated: HashMap<String, Instant>,
 }
 
 impl WaylandState {
@@ -40,20 +43,23 @@ impl WaylandState {
             .map(|w| w.handle.clone())
             .collect();
 
-        let windows: Vec<WindowInfo> = self
+        let mut windows: Vec<(Option<Instant>, WindowInfo)> = self
             .toplevel_info_state
             .toplevels()
             .filter(|t| {
                 // workspace field is empty on older protocol versions (< v3); include all then.
                 t.workspace.is_empty() || t.workspace.iter().any(|h| active.contains(h))
             })
-            .map(|t| WindowInfo {
-                title: t.title.clone(),
-                app_id: t.app_id.clone(),
+            .map(|t| {
+                let ts = self.last_activated.get(&t.identifier).copied();
+                (ts, WindowInfo { title: t.title.clone(), app_id: t.app_id.clone() })
             })
             .collect();
 
-        let _ = self.sender.blocking_send(windows);
+        // Most-recently-activated first; never-activated windows go to the end.
+        windows.sort_by(|(ta, _), (tb, _)| tb.cmp(ta));
+
+        let _ = self.sender.blocking_send(windows.into_iter().map(|(_, w)| w).collect());
     }
 }
 
@@ -76,8 +82,13 @@ impl ToplevelInfoHandler for WaylandState {
         &mut self,
         _: &Connection,
         _: &QueueHandle<Self>,
-        _: &ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1,
+        handle: &ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1,
     ) {
+        if let Some(info) = self.toplevel_info_state.info(handle)
+            && info.state.contains(&zcosmic_toplevel_handle_v1::State::Activated)
+        {
+            self.last_activated.insert(info.identifier.clone(), Instant::now());
+        }
         self.emit_window_list();
     }
 
@@ -85,8 +96,13 @@ impl ToplevelInfoHandler for WaylandState {
         &mut self,
         _: &Connection,
         _: &QueueHandle<Self>,
-        _: &ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1,
+        handle: &ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1,
     ) {
+        if let Some(info) = self.toplevel_info_state.info(handle)
+            && info.state.contains(&zcosmic_toplevel_handle_v1::State::Activated)
+        {
+            self.last_activated.insert(info.identifier.clone(), Instant::now());
+        }
         self.emit_window_list();
     }
 
@@ -94,8 +110,11 @@ impl ToplevelInfoHandler for WaylandState {
         &mut self,
         _: &Connection,
         _: &QueueHandle<Self>,
-        _: &ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1,
+        handle: &ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1,
     ) {
+        if let Some(info) = self.toplevel_info_state.info(handle) {
+            self.last_activated.remove(&info.identifier);
+        }
         self.emit_window_list();
     }
 }
@@ -147,6 +166,7 @@ fn run_wayland_thread(sender: mpsc::Sender<Vec<WindowInfo>>) {
         workspace_state: WorkspaceState::new(&registry_state, &qh),
         registry_state,
         sender,
+        last_activated: HashMap::new(),
     };
 
     let mut event_loop: EventLoop<WaylandState> = match EventLoop::try_new() {
