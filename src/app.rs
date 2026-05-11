@@ -167,11 +167,14 @@ impl cosmic::Application for AppModel {
             Page::Page1 => {
                 let header = widget::text::title3("Open windows on this workspace");
 
-                let mut list = widget::column::with_capacity(self.windows.len().max(1));
-                if self.windows.is_empty() {
+                let visible: Vec<_> = self.windows.iter()
+                    .filter(|w| w.app_id != Self::APP_ID)
+                    .collect();
+                let mut list = widget::column::with_capacity(visible.len().max(1));
+                if visible.is_empty() {
                     list = list.push(widget::text("(none yet — waiting for Wayland events)"));
                 } else {
-                    for w in &self.windows {
+                    for w in visible {
                         list = list.push(
                             widget::text(format!("{} — {}", w.title, w.app_id))
                         );
