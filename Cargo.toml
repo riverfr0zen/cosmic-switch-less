@@ -37,7 +37,9 @@ features = [
     # GPU-accelerated rendering
     "wgpu",
     # xdg portal dialogs on Linux
-    "xdg-portal"
+    "xdg-portal",
+    # Wayland layer-shell + cctk-gated platform_specific modules
+    "wayland",
 ]
 
 # Uncomment to test a locally-cloned libcosmic
