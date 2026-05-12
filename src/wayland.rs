@@ -15,6 +15,7 @@ use cctk::wayland_protocols::ext::workspace::v1::client::ext_workspace_handle_v1
 use cctk::workspace::{WorkspaceHandler, WorkspaceState};
 use cosmic::iced::Subscription;
 use cosmic::iced::futures::SinkExt;
+use cosmic_protocols::toplevel_info::v1::client::zcosmic_toplevel_handle_v1;
 use tokio::sync::mpsc;
 
 #[derive(Clone, Debug)]
@@ -29,9 +30,32 @@ struct WaylandState {
     toplevel_info_state: ToplevelInfoState,
     workspace_state: WorkspaceState,
     sender: mpsc::Sender<Vec<WindowInfo>>,
+    mru_order: Vec<String>,
 }
 
 impl WaylandState {
+    fn note_toplevel_update(
+        &mut self,
+        handle: &ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1,
+    ) {
+        let Some(info) = self.toplevel_info_state.info(handle) else {
+            return;
+        };
+        let id = info.identifier.clone();
+        let pos = self.mru_order.iter().position(|x| x == &id);
+        if info
+            .state
+            .contains(&zcosmic_toplevel_handle_v1::State::Activated)
+        {
+            if let Some(p) = pos {
+                self.mru_order.remove(p);
+            }
+            self.mru_order.push(id);
+        } else if pos.is_none() {
+            self.mru_order.insert(0, id);
+        }
+    }
+
     fn emit_window_list(&self) {
         let active: HashSet<_> = self
             .workspace_state
@@ -40,20 +64,35 @@ impl WaylandState {
             .map(|w| w.handle.clone())
             .collect();
 
-        let windows: Vec<WindowInfo> = self
+        let rank = |id: &str| -> usize {
+            match self.mru_order.iter().rposition(|x| x == id) {
+                Some(p) => self.mru_order.len() - 1 - p,
+                None => usize::MAX,
+            }
+        };
+
+        let mut windows: Vec<(usize, WindowInfo)> = self
             .toplevel_info_state
             .toplevels()
             .filter(|t| {
                 // workspace field is empty on older protocol versions (< v3); include all then.
                 t.workspace.is_empty() || t.workspace.iter().any(|h| active.contains(h))
             })
-            .map(|t| WindowInfo {
-                title: t.title.clone(),
-                app_id: t.app_id.clone(),
+            .map(|t| {
+                (
+                    rank(&t.identifier),
+                    WindowInfo {
+                        title: t.title.clone(),
+                        app_id: t.app_id.clone(),
+                    },
+                )
             })
             .collect();
 
-        let _ = self.sender.blocking_send(windows);
+        windows.sort_by_key(|(r, _)| *r);
+        let _ = self
+            .sender
+            .blocking_send(windows.into_iter().map(|(_, w)| w).collect());
     }
 }
 
@@ -76,8 +115,9 @@ impl ToplevelInfoHandler for WaylandState {
         &mut self,
         _: &Connection,
         _: &QueueHandle<Self>,
-        _: &ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1,
+        handle: &ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1,
     ) {
+        self.note_toplevel_update(handle);
         self.emit_window_list();
     }
 
@@ -85,8 +125,9 @@ impl ToplevelInfoHandler for WaylandState {
         &mut self,
         _: &Connection,
         _: &QueueHandle<Self>,
-        _: &ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1,
+        handle: &ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1,
     ) {
+        self.note_toplevel_update(handle);
         self.emit_window_list();
     }
 
@@ -94,8 +135,12 @@ impl ToplevelInfoHandler for WaylandState {
         &mut self,
         _: &Connection,
         _: &QueueHandle<Self>,
-        _: &ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1,
+        handle: &ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1,
     ) {
+        if let Some(info) = self.toplevel_info_state.info(handle) {
+            let id = info.identifier.clone();
+            self.mru_order.retain(|x| x != &id);
+        }
         self.emit_window_list();
     }
 }
@@ -147,6 +192,7 @@ fn run_wayland_thread(sender: mpsc::Sender<Vec<WindowInfo>>) {
         workspace_state: WorkspaceState::new(&registry_state, &qh),
         registry_state,
         sender,
+        mru_order: Vec::new(),
     };
 
     let mut event_loop: EventLoop<WaylandState> = match EventLoop::try_new() {
