@@ -69,3 +69,33 @@ Reference implementations in the COSMIC ecosystem:
 ## Dependency notes
 
 `libcosmic` is pulled directly from git (`pop-os/libcosmic`). To test against a local clone, uncomment the `[patch]` block at the bottom of `Cargo.toml`.
+
+## Stage history
+
+Each stage of work has a plan file in `.claude/plans/` and (where it produced code) a feature branch. Feature branches are kept locally even after merge so the history is browsable; `git log --all --graph` shows the full structure.
+
+### Merged
+
+- **Stage 1 — `x/stage1-get-windows`** ([plan](.claude/plans/stage1-window-listing.md))
+  - List open windows on the current workspace via Wayland. Established the `src/wayland.rs` listener-thread + `tokio::mpsc` + iced `Subscription` pattern described above.
+  - Merged into `main` at `963dba5`.
+
+- **Stage 2 (v2) — `f/sort-windows-v2`** ([plan](.claude/plans/stage2-sort-by-activation-vec.md))
+  - Sort the window list by activation order using a `Vec<String>` of toplevel identifiers, applying remove+push on each `Activated` event — the same mechanic `pop-launcher`'s `cosmic_toplevel` plugin uses behind shipping COSMIC Alt+Tab. No timestamps.
+  - Replaces the failed v1 attempt (see Abandoned below).
+  - Merged into `main` at `f8cab27`.
+
+- **Stage 4 — `f/stage4-layer-shell`** ([plan](.claude/plans/stage4-layer-shell-overlay.md))
+  - Convert the app from an `xdg_toplevel` window to a layer-shell overlay: `Settings::no_main_window(true).exit_on_close(false)`, `get_layer_surface` task with an explicit size (autosize via `size: None` left the surface unmapped), `view_window` for surface routing, ESC dismisses via `listen_raw` + `destroy_layer_surface` + `cosmic::iced::exit()`. Solid theme background via `cosmic::theme::Container::Background`.
+  - Required adding `"wayland"` to the libcosmic features list (gates the cctk-backed `platform_specific::{runtime, shell}::layer_surface` modules).
+  - Merged into `main` at `2b15803`.
+
+### Abandoned / cancelled
+
+- **Stage 2 v1 — `f/sort-windows`** ([plan](.claude/plans/stage2-sort-by-last-focused.md))
+  - First attempt at MRU sorting: maintain `HashMap<String, Instant>` keyed by toplevel identifier, timestamp updated by scanning `toplevels()` inside `emit_window_list` for the "newly activated" entry.
+  - **Failure mode:** every toplevel state event re-delivers the full state set. When the currently-active window's title (or any other field) changed, its state still contained `Activated`, so the "first activated whose identifier differs from `prev_activated`" heuristic kept reassigning timestamps based on creation-order iteration. Non-focused windows drifted to the top; "fixes" only nudged them down by one position. Replaced by stage 2 v2.
+
+- **Stage 3 — `f/stage3-exclude-self`** ([cancellation note](.claude/plans/stage3-exclude-self-cancelled.md))
+  - Was going to filter the switcher's own window out of the listing (by `app_id != Self::APP_ID`).
+  - **Cancelled** because layer-shell surfaces are not enumerated by `ext_foreign_toplevel_list_v1` (the protocol cctk builds on). Once stage 4 landed, the switcher's own surface stopped appearing in `toplevel_info_state.toplevels()` and any self-exclusion filter became dead code from day one. Branch exists but contains no functional commits.
