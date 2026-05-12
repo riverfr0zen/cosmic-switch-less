@@ -4,8 +4,16 @@ use crate::config::Config;
 use crate::fl;
 use cosmic::app::context_drawer;
 use cosmic::cosmic_config::{self, CosmicConfigEntry};
+use cosmic::iced::advanced::layout::Limits;
 use cosmic::iced::alignment::{Horizontal, Vertical};
-use cosmic::iced::{Alignment, Length, Subscription};
+use cosmic::iced::core::window::Id as SurfaceId;
+use cosmic::iced::event::listen_raw;
+use cosmic::iced::keyboard::{Event as KeyEvent, Key, key::Named};
+use cosmic::iced::platform_specific::runtime::wayland::layer_surface::SctkLayerSurfaceSettings;
+use cosmic::iced::platform_specific::shell::commands::layer_surface::{
+    Anchor, KeyboardInteractivity, destroy_layer_surface, get_layer_surface,
+};
+use cosmic::iced::{Alignment, Event, Length, Subscription};
 use cosmic::prelude::*;
 use cosmic::widget::{self, about::About, icon, menu, nav_bar};
 use std::collections::HashMap;
@@ -30,6 +38,8 @@ pub struct AppModel {
     config: Config,
     /// Windows open on the current workspace
     windows: Vec<crate::wayland::WindowInfo>,
+    /// Surface id for the layer-shell overlay
+    window_id: SurfaceId,
 }
 
 /// Messages emitted by the application and its widgets.
@@ -39,6 +49,7 @@ pub enum Message {
     ToggleContextPage(ContextPage),
     UpdateConfig(Config),
     WindowsUpdated(Vec<crate::wayland::WindowInfo>),
+    Dismiss,
 }
 
 /// Create a COSMIC application from the app model
@@ -95,8 +106,10 @@ impl cosmic::Application for AppModel {
             .links([(fl!("repository"), REPOSITORY)])
             .license(env!("CARGO_PKG_LICENSE"));
 
+        let window_id = SurfaceId::unique();
+
         // Construct the app model with the runtime's core.
-        let mut app = AppModel {
+        let app = AppModel {
             core,
             context_page: ContextPage::default(),
             about,
@@ -116,12 +129,23 @@ impl cosmic::Application for AppModel {
                 })
                 .unwrap_or_default(),
             windows: Vec::new(),
+            window_id,
         };
 
-        // Create a startup command that sets the window title.
-        let command = app.update_title();
+        let task = get_layer_surface(SctkLayerSurfaceSettings {
+            id: window_id,
+            keyboard_interactivity: KeyboardInteractivity::Exclusive,
+            anchor: Anchor::empty(),
+            namespace: "cosmic-app-switcher".into(),
+            size: Some((Some(600), Some(400))),
+            size_limits: Limits::NONE
+                .min_width(1.0)
+                .min_height(1.0),
+            exclusive_zone: -1,
+            ..Default::default()
+        });
 
-        (app, command)
+        (app, task)
     }
 
     /// Elements to pack at the start of the header bar.
@@ -225,6 +249,34 @@ impl cosmic::Application for AppModel {
             .into()
     }
 
+    /// Renders the layer-shell overlay surface.
+    fn view_window(&self, id: SurfaceId) -> Element<'_, Self::Message> {
+        if id != self.window_id {
+            return widget::space().height(Length::Fixed(1.0)).into();
+        }
+
+        let space_s = cosmic::theme::spacing().space_s;
+        let header = widget::text::title3("Open windows on this workspace");
+
+        let mut list = widget::column::with_capacity(self.windows.len().max(1));
+        if self.windows.is_empty() {
+            list = list.push(widget::text("(none yet — waiting for Wayland events)"));
+        } else {
+            for w in &self.windows {
+                list = list.push(widget::text(format!("{} — {}", w.title, w.app_id)));
+            }
+        }
+
+        widget::container(
+            widget::column::with_capacity(2)
+                .push(header)
+                .push(list.spacing(space_s))
+                .spacing(space_s),
+        )
+        .padding(space_s)
+        .into()
+    }
+
     /// Register subscriptions for this application.
     ///
     /// Subscriptions are long-running async tasks running in the background which
@@ -246,6 +298,14 @@ impl cosmic::Application for AppModel {
                 }),
             // Listen for open windows on the current workspace.
             crate::wayland::subscribe().map(Message::WindowsUpdated),
+            // Dismiss the overlay on Escape.
+            listen_raw(|event, _status, _id| match event {
+                Event::Keyboard(KeyEvent::KeyPressed {
+                    key: Key::Named(Named::Escape),
+                    ..
+                }) => Some(Message::Dismiss),
+                _ => None,
+            }),
         ];
 
         Subscription::batch(subscriptions)
@@ -281,6 +341,13 @@ impl cosmic::Application for AppModel {
 
             Message::WindowsUpdated(windows) => {
                 self.windows = windows;
+            }
+
+            Message::Dismiss => {
+                return Task::batch([
+                    destroy_layer_surface(self.window_id),
+                    cosmic::iced::exit(),
+                ]);
             }
         }
         Task::none()
