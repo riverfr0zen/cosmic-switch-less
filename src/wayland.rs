@@ -32,16 +32,32 @@ struct WaylandState {
     workspace_state: WorkspaceState,
     sender: mpsc::Sender<Vec<WindowInfo>>,
     last_activated: HashMap<String, Instant>,
+    prev_activated: Option<String>,
 }
 
 impl WaylandState {
-    fn emit_window_list(&self) {
+    fn emit_window_list(&mut self) {
         let active: HashSet<_> = self
             .workspace_state
             .workspaces()
             .filter(|w| w.state.contains(ext_workspace_handle_v1::State::Active))
             .map(|w| w.handle.clone())
             .collect();
+
+        // Record a timestamp only when the activated window actually changes.
+        // Checking here (rather than in update_toplevel) avoids spurious timestamps
+        // from non-focus updates (title changes, etc.) firing on an already-focused window.
+        let newly_activated = self
+            .toplevel_info_state
+            .toplevels()
+            .filter(|t| t.state.contains(&zcosmic_toplevel_handle_v1::State::Activated))
+            .map(|t| t.identifier.clone())
+            .find(|id| Some(id) != self.prev_activated.as_ref());
+
+        if let Some(ref id) = newly_activated {
+            self.last_activated.insert(id.clone(), Instant::now());
+            self.prev_activated.clone_from(&newly_activated);
+        }
 
         let mut windows: Vec<(Option<Instant>, WindowInfo)> = self
             .toplevel_info_state
@@ -82,13 +98,8 @@ impl ToplevelInfoHandler for WaylandState {
         &mut self,
         _: &Connection,
         _: &QueueHandle<Self>,
-        handle: &ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1,
+        _: &ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1,
     ) {
-        if let Some(info) = self.toplevel_info_state.info(handle)
-            && info.state.contains(&zcosmic_toplevel_handle_v1::State::Activated)
-        {
-            self.last_activated.insert(info.identifier.clone(), Instant::now());
-        }
         self.emit_window_list();
     }
 
@@ -96,13 +107,8 @@ impl ToplevelInfoHandler for WaylandState {
         &mut self,
         _: &Connection,
         _: &QueueHandle<Self>,
-        handle: &ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1,
+        _: &ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1,
     ) {
-        if let Some(info) = self.toplevel_info_state.info(handle)
-            && info.state.contains(&zcosmic_toplevel_handle_v1::State::Activated)
-        {
-            self.last_activated.insert(info.identifier.clone(), Instant::now());
-        }
         self.emit_window_list();
     }
 
@@ -113,7 +119,11 @@ impl ToplevelInfoHandler for WaylandState {
         handle: &ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1,
     ) {
         if let Some(info) = self.toplevel_info_state.info(handle) {
-            self.last_activated.remove(&info.identifier);
+            let id = &info.identifier;
+            self.last_activated.remove(id);
+            if self.prev_activated.as_deref() == Some(id) {
+                self.prev_activated = None;
+            }
         }
         self.emit_window_list();
     }
@@ -167,6 +177,7 @@ fn run_wayland_thread(sender: mpsc::Sender<Vec<WindowInfo>>) {
         registry_state,
         sender,
         last_activated: HashMap::new(),
+        prev_activated: None,
     };
 
     let mut event_loop: EventLoop<WaylandState> = match EventLoop::try_new() {
