@@ -274,6 +274,9 @@ impl cosmic::Application for AppModel {
                 .spacing(space_s),
         )
         .padding(space_s)
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .class(cosmic::theme::Container::Background)
         .into()
     }
 
