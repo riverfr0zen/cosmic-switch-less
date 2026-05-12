@@ -16,7 +16,10 @@ use cosmic::iced::platform_specific::shell::commands::layer_surface::{
 use cosmic::iced::{Alignment, Event, Length, Subscription};
 use cosmic::prelude::*;
 use cosmic::widget::{self, about::About, icon, menu, nav_bar};
+use freedesktop_desktop_entry as fde;
+use freedesktop_desktop_entry::DesktopEntry;
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 const APP_ICON: &[u8] = include_bytes!("../resources/icons/hicolor/scalable/apps/icon.svg");
@@ -40,6 +43,8 @@ pub struct AppModel {
     windows: Vec<crate::wayland::WindowInfo>,
     /// Surface id for the layer-shell overlay
     window_id: SurfaceId,
+    /// Cached `.desktop` entries for `app_id` → icon lookup.
+    desktop_entries: Vec<DesktopEntry>,
 }
 
 /// Messages emitted by the application and its widgets.
@@ -108,6 +113,11 @@ impl cosmic::Application for AppModel {
 
         let window_id = SurfaceId::unique();
 
+        let locales = fde::get_languages_from_env();
+        let desktop_entries = fde::Iter::new(fde::default_paths())
+            .filter_map(|path| DesktopEntry::from_path(path, Some(&locales)).ok())
+            .collect::<Vec<_>>();
+
         // Construct the app model with the runtime's core.
         let app = AppModel {
             core,
@@ -130,6 +140,7 @@ impl cosmic::Application for AppModel {
                 .unwrap_or_default(),
             windows: Vec::new(),
             window_id,
+            desktop_entries,
         };
 
         let task = get_layer_surface(SctkLayerSurfaceSettings {
@@ -196,9 +207,7 @@ impl cosmic::Application for AppModel {
                     list = list.push(widget::text("(none yet — waiting for Wayland events)"));
                 } else {
                     for w in &self.windows {
-                        list = list.push(
-                            widget::text(format!("{} — {}", w.title, w.app_id))
-                        );
+                        list = list.push(self.window_row(w, space_s));
                     }
                 }
 
@@ -263,7 +272,7 @@ impl cosmic::Application for AppModel {
             list = list.push(widget::text("(none yet — waiting for Wayland events)"));
         } else {
             for w in &self.windows {
-                list = list.push(widget::text(format!("{} — {}", w.title, w.app_id)));
+                list = list.push(self.window_row(w, space_s));
             }
         }
 
@@ -366,6 +375,44 @@ impl cosmic::Application for AppModel {
 }
 
 impl AppModel {
+    /// Resolves an `app_id` to a freedesktop icon name, with the same lookup
+    /// pop-launcher's `cosmic_toplevel` plugin uses behind the shipping COSMIC
+    /// alt-tab.
+    fn icon_name_for(&self, app_id: &str) -> String {
+        let key = fde::unicase::Ascii::new(app_id);
+        let entry = fde::find_app_by_id(&self.desktop_entries, key)
+            .cloned()
+            .unwrap_or_else(|| DesktopEntry::from_appid(app_id.to_string()));
+        entry
+            .icon()
+            .map_or_else(|| "application-x-executable".to_owned(), str::to_owned)
+    }
+
+    fn window_row<'a>(
+        &self,
+        w: &'a crate::wayland::WindowInfo,
+        spacing: u16,
+    ) -> Element<'a, Message> {
+        // .desktop entries sometimes set `Icon=` to an absolute path
+        // (e.g. /home/$USER/.local/share/icons/.../foo.png) rather than a
+        // freedesktop theme name. `icon::from_name` only resolves names, so
+        // mirror cosmic-launcher and branch on `/` to pick the right loader.
+        let icon_str = self.icon_name_for(&w.app_id);
+        let icon_widget: Element<'_, Message> = if icon_str.contains('/') {
+            icon::icon(icon::from_path(PathBuf::from(icon_str)))
+                .size(24)
+                .into()
+        } else {
+            icon::from_name(icon_str).size(24).into()
+        };
+        widget::row::with_capacity(2)
+            .push(icon_widget)
+            .push(widget::text(format!("{} — {}", w.title, w.app_id)))
+            .spacing(spacing)
+            .align_y(Alignment::Center)
+            .into()
+    }
+
     /// Updates the header and window titles.
     pub fn update_title(&mut self) -> Task<cosmic::Action<Message>> {
         let mut window_title = fl!("app-title");
