@@ -2,7 +2,7 @@
 Name=Cosmic App Switcher
 Comment=An app switcher for COSMIC Desktop
 Type=Application
-Icon=com.github.riverfr0zen.cosmic-app-template
+Icon=com.github.riverfr0zen.cosmic-app-switcher
 Exec=cosmic-app-switcher %F
 Terminal=false
 StartupNotify=true

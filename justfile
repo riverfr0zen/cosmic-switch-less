@@ -1,7 +1,7 @@
 # Name of the application's binary.
 name := 'cosmic-app-switcher'
 # The unique ID of the application.
-appid := 'com.github.riverfr0zen.cosmic-app-template'
+appid := 'com.github.riverfr0zen.cosmic-app-switcher'
 
 # Path to root file system, which defaults to `/`.
 rootdir := ''
