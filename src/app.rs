@@ -19,6 +19,7 @@ use cosmic::widget::{self, about::About, icon, menu, nav_bar};
 use freedesktop_desktop_entry as fde;
 use freedesktop_desktop_entry::DesktopEntry;
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 const APP_ICON: &[u8] = include_bytes!("../resources/icons/hicolor/scalable/apps/icon.svg");
@@ -392,8 +393,20 @@ impl AppModel {
         w: &'a crate::wayland::WindowInfo,
         spacing: u16,
     ) -> Element<'a, Message> {
+        // .desktop entries sometimes set `Icon=` to an absolute path
+        // (e.g. /home/$USER/.local/share/icons/.../foo.png) rather than a
+        // freedesktop theme name. `icon::from_name` only resolves names, so
+        // mirror cosmic-launcher and branch on `/` to pick the right loader.
+        let icon_str = self.icon_name_for(&w.app_id);
+        let icon_widget: Element<'_, Message> = if icon_str.contains('/') {
+            icon::icon(icon::from_path(PathBuf::from(icon_str)))
+                .size(24)
+                .into()
+        } else {
+            icon::from_name(icon_str).size(24).into()
+        };
         widget::row::with_capacity(2)
-            .push(icon::from_name(self.icon_name_for(&w.app_id)).size(24))
+            .push(icon_widget)
             .push(widget::text(format!("{} — {}", w.title, w.app_id)))
             .spacing(spacing)
             .align_y(Alignment::Center)
