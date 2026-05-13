@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Trigger the cosmic-app-switcher overlay. Bind this to Alt+Tab in
+# cosmic-comp keybindings (System Settings → Input → Keyboard → Shortcuts).
+
+# pkill -x can't be used: Linux truncates /proc/<pid>/comm to 15 characters,
+# and "cosmic-app-switcher" is 19. pidof matches the executable basename
+# correctly via /proc/<pid>/exe.
+
+# Daemon already running: signal it to show the overlay.
+if pid=$(pidof cosmic-app-switcher) && [ -n "$pid" ]; then
+    kill -SIGUSR1 $pid
+    exit 0
+fi
+
+# Not running: start it, then signal once it's up.
+setsid -f cosmic-app-switcher >/dev/null 2>&1
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+    sleep 0.05
+    if pid=$(pidof cosmic-app-switcher) && [ -n "$pid" ]; then
+        kill -SIGUSR1 $pid
+        exit 0
+    fi
+done
+exit 1
