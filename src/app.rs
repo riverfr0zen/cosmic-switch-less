@@ -168,7 +168,7 @@ impl cosmic::Application for AppModel {
             Message::SyncScroll => return self.scroll_to_highlighted(),
             Message::CycleNext => {
                 if !self.shown {
-                    return self.summon_with_highlight(1);
+                    return self.summon_with_highlight(1, false);
                 }
                 if !self.windows.is_empty() {
                     self.highlighted_index = (self.highlighted_index + 1) % self.windows.len();
@@ -177,7 +177,7 @@ impl cosmic::Application for AppModel {
             }
             Message::CyclePrev => {
                 if !self.shown {
-                    return self.summon_with_highlight(self.windows.len().saturating_sub(1));
+                    return self.summon_with_highlight(self.windows.len().saturating_sub(1), true);
                 }
                 if !self.windows.is_empty() {
                     let len = self.windows.len();
@@ -216,7 +216,11 @@ fn signals_subscription() -> Subscription<Message> {
 }
 
 impl AppModel {
-    fn summon_with_highlight(&mut self, idx: usize) -> Task<cosmic::Action<Message>> {
+    fn summon_with_highlight(
+        &mut self,
+        idx: usize,
+        scroll_on_summon: bool,
+    ) -> Task<cosmic::Action<Message>> {
         self.shown = true;
         self.highlighted_index = idx.min(self.windows.len().saturating_sub(1));
         let surface = get_layer_surface(SctkLayerSurfaceSettings {
@@ -229,6 +233,9 @@ impl AppModel {
             exclusive_zone: -1,
             ..Default::default()
         });
+        if !scroll_on_summon {
+            return surface;
+        }
         // The scrollable widget doesn't register its Id with iced's runtime
         // until after the first view() of the new surface, so a synchronous
         // snap_to issued here would target nothing. Schedule a SyncScroll
