@@ -30,10 +30,16 @@ pub struct AppModel {
 #[derive(Debug, Clone)]
 pub enum Message {
     WindowsUpdated(Vec<crate::wayland::WindowInfo>),
-    Show,
     Hide,
+    /// Forward summon-or-cycle. If hidden, summon with the previous window
+    /// (MRU index 1) highlighted; if shown, advance the highlight by one.
     CycleNext,
+    /// Backward summon-or-cycle. If hidden, summon with the least-recent
+    /// window highlighted; if shown, move the highlight back by one.
     CyclePrev,
+    /// Deferred scroll sync — runs one event-loop tick after a summon so the
+    /// scrollable widget has registered its Id with iced's runtime.
+    SyncScroll,
 }
 
 impl cosmic::Application for AppModel {
@@ -119,7 +125,7 @@ impl cosmic::Application for AppModel {
     fn subscription(&self) -> Subscription<Self::Message> {
         Subscription::batch(vec![
             crate::wayland::subscribe().map(Message::WindowsUpdated),
-            sigusr1_subscription(),
+            signals_subscription(),
             listen_raw(|event, _status, _id| match event {
                 Event::Keyboard(KeyEvent::KeyPressed {
                     key: Key::Named(Named::Tab),
@@ -153,35 +159,26 @@ impl cosmic::Application for AppModel {
                     .highlighted_index
                     .min(self.windows.len().saturating_sub(1));
             }
-            Message::Show => {
-                if !self.shown {
-                    self.shown = true;
-                    self.highlighted_index = 0;
-                    return get_layer_surface(SctkLayerSurfaceSettings {
-                        id: self.window_id,
-                        keyboard_interactivity: KeyboardInteractivity::Exclusive,
-                        anchor: Anchor::empty(),
-                        namespace: "cosmic-app-switcher".into(),
-                        size: Some((Some(600), Some(400))),
-                        size_limits: Limits::NONE.min_width(1.0).min_height(1.0),
-                        exclusive_zone: -1,
-                        ..Default::default()
-                    });
-                }
-            }
             Message::Hide => {
                 if self.shown {
                     self.shown = false;
                     return destroy_layer_surface(self.window_id);
                 }
             }
+            Message::SyncScroll => return self.scroll_to_highlighted(),
             Message::CycleNext => {
+                if !self.shown {
+                    return self.summon_with_highlight(1);
+                }
                 if !self.windows.is_empty() {
                     self.highlighted_index = (self.highlighted_index + 1) % self.windows.len();
                     return self.scroll_to_highlighted();
                 }
             }
             Message::CyclePrev => {
+                if !self.shown {
+                    return self.summon_with_highlight(self.windows.len().saturating_sub(1));
+                }
                 if !self.windows.is_empty() {
                     let len = self.windows.len();
                     self.highlighted_index = (self.highlighted_index + len - 1) % len;
@@ -193,15 +190,25 @@ impl cosmic::Application for AppModel {
     }
 }
 
-fn sigusr1_subscription() -> Subscription<Message> {
+fn signals_subscription() -> Subscription<Message> {
     Subscription::run(|| {
         cosmic::iced::stream::channel(
             4,
             |mut output: cosmic::iced::futures::channel::mpsc::Sender<Message>| async move {
-                let mut sig = signal(SignalKind::user_defined1())
+                let mut sig1 = signal(SignalKind::user_defined1())
                     .expect("install SIGUSR1 handler");
-                while sig.recv().await.is_some() {
-                    let _ = output.send(Message::Show).await;
+                let mut sig2 = signal(SignalKind::user_defined2())
+                    .expect("install SIGUSR2 handler");
+                loop {
+                    tokio::select! {
+                        Some(()) = sig1.recv() => {
+                            let _ = output.send(Message::CycleNext).await;
+                        }
+                        Some(()) = sig2.recv() => {
+                            let _ = output.send(Message::CyclePrev).await;
+                        }
+                        else => break,
+                    }
                 }
             },
         )
@@ -209,6 +216,33 @@ fn sigusr1_subscription() -> Subscription<Message> {
 }
 
 impl AppModel {
+    fn summon_with_highlight(&mut self, idx: usize) -> Task<cosmic::Action<Message>> {
+        self.shown = true;
+        self.highlighted_index = idx.min(self.windows.len().saturating_sub(1));
+        let surface = get_layer_surface(SctkLayerSurfaceSettings {
+            id: self.window_id,
+            keyboard_interactivity: KeyboardInteractivity::Exclusive,
+            anchor: Anchor::empty(),
+            namespace: "cosmic-app-switcher".into(),
+            size: Some((Some(600), Some(400))),
+            size_limits: Limits::NONE.min_width(1.0).min_height(1.0),
+            exclusive_zone: -1,
+            ..Default::default()
+        });
+        // The scrollable widget doesn't register its Id with iced's runtime
+        // until after the first view() of the new surface, so a synchronous
+        // snap_to issued here would target nothing. Schedule a SyncScroll
+        // message via a brief async wait so it lands in the next event-loop
+        // iteration, after view() has run.
+        let deferred = cosmic::iced::Task::perform(
+            async {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            },
+            |()| cosmic::Action::App(Message::SyncScroll),
+        );
+        Task::batch([surface, deferred])
+    }
+
     fn scroll_to_highlighted(&self) -> Task<cosmic::Action<Message>> {
         if self.windows.len() <= 1 {
             return Task::none();
