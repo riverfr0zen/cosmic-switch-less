@@ -21,6 +21,7 @@ pub struct AppModel {
     core: cosmic::Core,
     windows: Vec<crate::wayland::WindowInfo>,
     window_id: SurfaceId,
+    scrollable_id: cosmic::widget::Id,
     desktop_entries: Vec<DesktopEntry>,
     shown: bool,
     highlighted_index: usize,
@@ -65,6 +66,7 @@ impl cosmic::Application for AppModel {
             core,
             windows: Vec::new(),
             window_id,
+            scrollable_id: cosmic::widget::Id::unique(),
             desktop_entries,
             shown: false,
             highlighted_index: 0,
@@ -100,7 +102,11 @@ impl cosmic::Application for AppModel {
         widget::container(
             widget::column::with_capacity(2)
                 .push(header)
-                .push(widget::scrollable(list.spacing(space_s)).height(Length::Fill))
+                .push(
+                    widget::scrollable(list.spacing(space_s))
+                        .id(self.scrollable_id.clone())
+                        .height(Length::Fill),
+                )
                 .spacing(space_s),
         )
         .padding(space_s)
@@ -172,12 +178,14 @@ impl cosmic::Application for AppModel {
             Message::CycleNext => {
                 if !self.windows.is_empty() {
                     self.highlighted_index = (self.highlighted_index + 1) % self.windows.len();
+                    return self.scroll_to_highlighted();
                 }
             }
             Message::CyclePrev => {
                 if !self.windows.is_empty() {
                     let len = self.windows.len();
                     self.highlighted_index = (self.highlighted_index + len - 1) % len;
+                    return self.scroll_to_highlighted();
                 }
             }
         }
@@ -201,6 +209,25 @@ fn sigusr1_subscription() -> Subscription<Message> {
 }
 
 impl AppModel {
+    fn scroll_to_highlighted(&self) -> Task<cosmic::Action<Message>> {
+        if self.windows.len() <= 1 {
+            return Task::none();
+        }
+        // Relative offset: 0.0 puts the top of the content at the top of the
+        // viewport, 1.0 puts the bottom of the content at the bottom. Mapping
+        // index → fraction this way keeps the highlighted row in view at both
+        // ends and roughly centred in the middle of the list.
+        #[allow(clippy::cast_precision_loss)]
+        let fraction = self.highlighted_index as f32 / (self.windows.len() - 1) as f32;
+        cosmic::iced::widget::scrollable::snap_to(
+            self.scrollable_id.clone(),
+            cosmic::iced::widget::scrollable::RelativeOffset {
+                x: Some(0.0),
+                y: Some(fraction),
+            },
+        )
+    }
+
     /// Resolves an `app_id` to a freedesktop icon name, mirroring
     /// pop-launcher's `cosmic_toplevel` plugin (the lookup behind the
     /// shipping COSMIC alt-tab).
