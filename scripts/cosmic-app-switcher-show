@@ -1,14 +1,22 @@
 #!/usr/bin/env bash
-# Trigger the cosmic-app-switcher overlay. Bind this to Alt+Tab in
-# cosmic-comp keybindings (System Settings → Input → Keyboard → Shortcuts).
+# Trigger the cosmic-app-switcher overlay. Bind to a key combo in
+# cosmic-comp keybindings (System Settings → Input → Keyboard → Shortcuts):
+#   Alt+Tab        → cosmic-app-switcher-show
+#   Alt+Shift+Tab  → cosmic-app-switcher-show --back
 
 # pkill -x can't be used: Linux truncates /proc/<pid>/comm to 15 characters,
 # and "cosmic-app-switcher" is 19. pidof matches the executable basename
 # correctly via /proc/<pid>/exe.
 
-# Daemon already running: signal it to show the overlay.
+# SIGUSR1 → forward summon-or-cycle. SIGUSR2 → backward.
+sig="-SIGUSR1"
+if [ "$1" = "--back" ]; then
+    sig="-SIGUSR2"
+fi
+
+# Daemon already running: signal it.
 if pid=$(pidof cosmic-app-switcher) && [ -n "$pid" ]; then
-    kill -SIGUSR1 $pid
+    kill "$sig" $pid
     exit 0
 fi
 
@@ -17,7 +25,7 @@ setsid -f cosmic-app-switcher >/dev/null 2>&1
 for _ in 1 2 3 4 5 6 7 8 9 10; do
     sleep 0.05
     if pid=$(pidof cosmic-app-switcher) && [ -n "$pid" ]; then
-        kill -SIGUSR1 $pid
+        kill "$sig" $pid
         exit 0
     fi
 done

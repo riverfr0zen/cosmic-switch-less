@@ -4,13 +4,17 @@ Originally generated from the [COSMIC application template](https://github.com/p
 
 ## How it works
 
-`cosmic-app-switcher` runs as a background daemon — it has no visible UI at idle. When it receives `SIGUSR1`, it shows a layer-shell overlay listing the open windows on the current workspace, with the most-recently-focused row highlighted. While the overlay is up:
+`cosmic-app-switcher` runs as a background daemon — it has no visible UI at idle. It listens for two signals:
 
-- `Tab` cycles the highlight forward (auto-scrolls so the selected row stays visible)
-- `Shift+Tab` cycles backward
-- Releasing `Alt` or pressing `Esc` hides the overlay; the daemon keeps running and can be re-summoned
+- `SIGUSR1` — if hidden, show the overlay with the **previous window** (next in MRU order) highlighted; if shown, cycle the highlight forward.
+- `SIGUSR2` — if hidden, show with the **least-recent window** highlighted; if shown, cycle backward.
 
-Wayland does not let a client register global hotkeys, so the daemon ships with a tiny wrapper script (`cosmic-app-switcher-show`) that you bind to a key combination in the COSMIC compositor.
+The shipped wrapper `cosmic-app-switcher-show` sends the right signal: bare invocation → `SIGUSR1`, with `--back` → `SIGUSR2`. Wayland does not let a client register global hotkeys, so you bind the wrapper to a key combo in cosmic-comp. cosmic-comp re-fires the same shortcut on every press while held, which is exactly what makes Tab cycling work: each re-trigger advances the highlight by one.
+
+While the overlay is up:
+
+- Releasing `Alt` or pressing `Esc` hides the overlay; the daemon keeps running and can be re-summoned.
+- In-app `Tab` / `Shift+Tab` also cycle the highlight (handy when the overlay was summoned from a terminal rather than a cosmic-comp binding).
 
 ## Building
 
@@ -25,16 +29,15 @@ just check           # clippy with pedantic warnings
 # 1. Start the daemon (invisible) — leave this running.
 setsid -f ./target/release/cosmic-app-switcher >/tmp/cosmic-app-switcher.log 2>&1
 
-# 2. Summon the overlay (run anytime to bring it up).
+# 2. Summon the overlay (forward). Re-run to cycle forward while shown.
 ./scripts/cosmic-app-switcher-show
 
-# 3. Inside the overlay:
-#    - hold Alt, tap Tab            → cycle forward (auto-scrolls)
-#    - hold Alt+Shift, tap Tab      → cycle backward
-#    - release Alt OR press Esc     → hide (daemon keeps running)
+# 3. Cycle backward (or summon backward when hidden).
+./scripts/cosmic-app-switcher-show --back
 
-# 4. Re-summon any time — same daemon.
-./scripts/cosmic-app-switcher-show
+# 4. Inside the overlay:
+#    - in-app Tab / Shift+Tab        → cycle forward / backward
+#    - release Alt OR press Esc      → hide (daemon keeps running)
 
 # 5. Stop the daemon when done.
 kill $(pidof cosmic-app-switcher)
@@ -46,13 +49,18 @@ tail -f /tmp/cosmic-app-switcher.log
 ## End-user setup (installed)
 
 1. `sudo just install` — installs `cosmic-app-switcher` and `cosmic-app-switcher-show` to `/usr/bin/`.
-2. In *COSMIC Settings → Input → Keyboard → Shortcuts → Custom shortcuts*, add a binding to the command `cosmic-app-switcher-show`. Pick whatever key combo you have free — `Alt+Tab` works if you first unbind the built-in launcher, otherwise `Super+Tab` is a good no-conflict alternative.
+2. In *COSMIC Settings → Input → Keyboard → Shortcuts → Custom shortcuts*, add the primary binding:
+   - `Alt+Tab` → `cosmic-app-switcher-show`
+
+   First unbind the built-in COSMIC launcher if it has Alt+Tab — otherwise pick another combo (e.g. `Super+Tab`).
+
+   Optionally also bind `Alt+Shift+Tab` → `cosmic-app-switcher-show --back`. This is only needed if you want the *first* press of Alt+Shift+Tab to summon directly into backward-cycle mode (overlay opens with the least-recent window highlighted). Without it, you can still cycle backward freely while the overlay is up — the in-app Shift+Tab fallback handles that — you just can't *start* a session that way.
 3. (Optional) Add `cosmic-app-switcher` to autostart so the daemon is always alive. Otherwise the wrapper cold-starts it on first press, adding ~50–500 ms of latency.
-4. Press the hotkey, cycle, release.
+4. Press `Alt+Tab` — the previously-focused window is highlighted. Keep Alt held and tap Tab repeatedly to walk further back through MRU; tap Shift+Tab to walk forward. Release Alt to hide.
 
 ## Edge cases worth poking at
 
-- Re-summon after hide → daemon stays alive, highlight resets to the top row.
+- Re-summon after hide → daemon stays alive, highlight resets to the previous-window slot (MRU index 1).
 - Cycle past the visible window → list scrolls so the highlight stays in view.
 - Open/close apps while the daemon is hidden → next summon reflects the new window list (the Wayland subscription keeps running at idle).
 - Single window or zero windows → cycling is a no-op (no panic).
