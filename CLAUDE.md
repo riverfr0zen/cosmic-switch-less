@@ -8,6 +8,14 @@ This project was scaffolded from [cosmic-app-template](https://github.com/pop-os
 
 Reference source for the COSMIC ecosystem is checked out locally at `./cosmic-research/` — currently `cosmic-comp`, `cosmic-settings-daemon`, `cosmic-launcher`, and `pop-launcher`. **Look there before asking to download or fetch any COSMIC-related materials.** When you do download new reference material, save it into that folder so it's available next time.
 
+## Plan to dev workflow
+
+Once the plan is approved, always save the plan locally under `./claude/plans`. 
+
+Plans should be saved in the main branch before beginning development.
+
+Once the plan is saved, create an appropriately named branch (usually "f/stageN..."--look at existing branches for reference pattern) for dev.
+
 ## Commands
 
 This project uses [just](https://github.com/casey/just) as a task runner:
