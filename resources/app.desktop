@@ -1,9 +1,9 @@
 [Desktop Entry]
-Name=Cosmic App Switcher
-Comment=An app switcher for COSMIC Desktop
+Name=Cosmic Switch Less
+Comment=An alternative app switcher for COSMIC Desktop limited to windows on the current workspace
 Type=Application
-Icon=com.github.riverfr0zen.cosmic-app-switcher
-Exec=cosmic-app-switcher %F
+Icon=com.github.riverfr0zen.cosmic-switch-less
+Exec=cosmic-switch-less %F
 Terminal=false
 StartupNotify=true
 Categories=COSMIC

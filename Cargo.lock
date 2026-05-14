@@ -873,20 +873,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cosmic-app-switcher"
-version = "0.1.0"
-dependencies = [
- "calloop",
- "calloop-wayland-source",
- "cosmic-client-toolkit 0.2.0 (git+https://github.com/pop-os/cosmic-protocols)",
- "cosmic-protocols 0.2.0 (git+https://github.com/pop-os/cosmic-protocols)",
- "freedesktop-desktop-entry",
- "libcosmic",
- "tokio",
- "wayland-client",
-]
-
-[[package]]
 name = "cosmic-client-toolkit"
 version = "0.2.0"
 source = "git+https://github.com/pop-os/cosmic-protocols?rev=160b086#160b086abe03cd34a8a375d7fbe47b24308d1f38"
@@ -990,6 +976,20 @@ version = "0.1.0"
 source = "git+https://github.com/pop-os/dbus-settings-bindings#507e342c21d3ce6ae41b1d4f3fa2f0ad5ee23e75"
 dependencies = [
  "zbus",
+]
+
+[[package]]
+name = "cosmic-switch-less"
+version = "0.1.0"
+dependencies = [
+ "calloop",
+ "calloop-wayland-source",
+ "cosmic-client-toolkit 0.2.0 (git+https://github.com/pop-os/cosmic-protocols)",
+ "cosmic-protocols 0.2.0 (git+https://github.com/pop-os/cosmic-protocols)",
+ "freedesktop-desktop-entry",
+ "libcosmic",
+ "tokio",
+ "wayland-client",
 ]
 
 [[package]]

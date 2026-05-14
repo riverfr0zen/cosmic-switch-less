@@ -49,14 +49,14 @@ The app follows the elm-style architecture that iced imposes:
 
 ### Localization
 
-Fluent `.ftl` files live in `i18n/<lang>/cosmic_app_switcher.ftl`. English (`i18n/en/`) is the fallback defined in `i18n.toml`. Add a new language by copying the `en` directory and renaming it to the ISO 639-1 code.
+Fluent `.ftl` files live in `i18n/<lang>/cosmic_switch_less.ftl`. English (`i18n/en/`) is the fallback defined in `i18n.toml`. Add a new language by copying the `en` directory and renaming it to the ISO 639-1 code.
 
 ### Packaging
 
 For distribution builds: vendor dependencies first (`just vendor`), then build offline (`just build-vendored`). Override install paths with `rootdir` and `prefix` variables:
 
 ```sh
-just rootdir=debian/cosmic-app-switcher prefix=/usr install
+just rootdir=debian/cosmic-switch-less prefix=/usr install
 ```
 
 ### Wayland compositor integration (`src/wayland.rs`)

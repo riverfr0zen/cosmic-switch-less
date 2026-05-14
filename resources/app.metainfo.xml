@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>com.github.riverfr0zen.cosmic-app-switcher</id>
+  <id>com.github.riverfr0zen.cosmic-switch-less</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MPL-2.0</project_license>
-  <name>Cosmic App Switcher</name>
-  <summary>An app switcher for COSMIC Desktop</summary>
+  <name>Cosmic Switch Less</name>
+  <summary>An alternative app switcher for COSMIC Desktop limited to windows on the current workspace</summary>
   <icon type="remote" width="64" height="64" scale="1">
-    https://github.com/riverfr0zen/cosmic-app-switcher/raw/main/resources/icons/hicolor/scalable/apps/icon.svg
+    https://github.com/riverfr0zen/cosmic-switch-less/raw/main/resources/icons/hicolor/scalable/apps/icon.svg
   </icon>
-  <url type="vcs-browser">https://github.com/riverfr0zen/cosmic-app-switcher</url>
-  <launchable type="desktop-id">com.github.riverfr0zen.cosmic-app-switcher.desktop</launchable>
+  <url type="vcs-browser">https://github.com/riverfr0zen/cosmic-switch-less</url>
+  <launchable type="desktop-id">com.github.riverfr0zen.cosmic-switch-less.desktop</launchable>
   <provides>
-    <id>com.github.riverfr0zen.cosmic-app-switcher</id>
+    <id>com.github.riverfr0zen.cosmic-switch-less</id>
     <binaries>
-      <binary>cosmic-app-switcher</binary>
+      <binary>cosmic-switch-less</binary>
     </binaries>
   </provides>
   <requires>
@@ -32,4 +32,3 @@
   </keywords>
   <content_rating type="oars-1.1" />
 </component>
-

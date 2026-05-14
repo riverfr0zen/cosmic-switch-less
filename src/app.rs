@@ -19,7 +19,7 @@ use std::sync::LazyLock;
 use tokio::signal::unix::{SignalKind, signal};
 
 static AUTOSIZE_ID: LazyLock<cosmic::widget::Id> =
-    LazyLock::new(|| cosmic::widget::Id::new("cosmic-app-switcher-autosize"));
+    LazyLock::new(|| cosmic::widget::Id::new("cosmic-switch-less-autosize"));
 const OVERLAY_WIDTH: f32 = 600.0;
 const SCREEN_HEIGHT_FRACTION: f32 = 0.8;
 /// Header + paddings + column spacing, subtracted from the screen-fraction so
@@ -67,7 +67,7 @@ impl cosmic::Application for AppModel {
     type Flags = ();
     type Message = Message;
 
-    const APP_ID: &'static str = "com.github.riverfr0zen.cosmic-app-switcher";
+    const APP_ID: &'static str = "com.github.riverfr0zen.cosmic-switch-less";
 
     fn core(&self) -> &cosmic::Core {
         &self.core
@@ -291,7 +291,7 @@ impl AppModel {
             id: self.window_id,
             keyboard_interactivity: KeyboardInteractivity::Exclusive,
             anchor: Anchor::empty(),
-            namespace: "cosmic-app-switcher".into(),
+            namespace: "cosmic-switch-less".into(),
             size: None,
             size_limits: Limits::NONE
                 .min_width(1.0)
