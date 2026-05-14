@@ -13,7 +13,9 @@ The shipped wrapper `cosmic-app-switcher-show` sends the right signal: bare invo
 
 While the overlay is up:
 
-- Releasing `Alt` or pressing `Esc` hides the overlay; the daemon keeps running and can be re-summoned.
+- Releasing `Alt` or pressing `Enter` commits the selection: the highlighted window is activated and the overlay hides.
+- Pressing `Esc` cancels: the overlay hides without switching.
+- Either way the daemon keeps running and can be re-summoned.
 - In-app `Tab` / `Shift+Tab` also cycle the highlight (handy when the overlay was summoned from a terminal rather than a cosmic-comp binding).
 
 ## Building
@@ -37,7 +39,8 @@ setsid -f ./target/release/cosmic-app-switcher >/tmp/cosmic-app-switcher.log 2>&
 
 # 4. Inside the overlay:
 #    - in-app Tab / Shift+Tab        → cycle forward / backward
-#    - release Alt OR press Esc      → hide (daemon keeps running)
+#    - release Alt OR press Enter    → activate highlighted window, then hide
+#    - press Esc                     → hide without switching
 
 # 5. Stop the daemon when done.
 kill $(pidof cosmic-app-switcher)
