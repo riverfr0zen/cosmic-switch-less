@@ -102,6 +102,30 @@ Each stage of work has a plan file in `.claude/plans/` and (where it produced co
   - Required adding `"wayland"` to the libcosmic features list (gates the cctk-backed `platform_specific::{runtime, shell}::layer_surface` modules).
   - Merged into `main` at `2b15803`.
 
+- **Stage 5 — `f/stage5-app-icons`** ([plan](.claude/plans/stage5-app-icons.md))
+  - Show the application's freedesktop icon to the left of each window row. Caches all `.desktop` entries at startup and resolves `app_id → icon` via `freedesktop-desktop-entry` (mirroring `pop-launcher`'s `cosmic_toplevel` plugin), with a path-vs-name branch for `Icon=` values that are absolute paths and an `application-x-executable` fallback.
+  - Merged into `main` at `2a390a4`.
+
+- **Stage 6 — `x/cleanup`** ([plan](.claude/plans/stage6-cleanup.md))
+  - Strip the `cosmic-app-template` scaffolding left over after the stage 4 layer-shell conversion: the nav bar, About context drawer, header menu, config-watch wiring, and the i18n module + Fluent assets — all unreachable from the overlay's runtime path. Trims now-unused crates and libcosmic features, and renames the template's packaging identifiers (`appid`, desktop/metainfo files) to `cosmic-app-switcher`. `src/config.rs` kept as scaffolding for future config use.
+  - Merged into `main` at `452741c`.
+
+- **Stage 7 — `f/stage7-daemon-keybindings`** ([plan](.claude/plans/stage7-background-daemon-keybindings.md))
+  - Turn the app into a background daemon: invisible at idle, summoned by `SIGUSR1`, dismissed on Alt-release or Esc without exiting the process. Adds a `highlighted_index` selection cursor with `Tab` / `Shift+Tab` cycling, highlight styling on the selected row, auto-scroll to keep it in view, and a shipped `cosmic-app-switcher-show` wrapper script (bound to `Alt+Tab` in cosmic-comp) that handles both the signal and cold-start cases.
+  - Merged into `main` at `4ef3219`.
+
+- **Stage 8 — `f/stage8-retrigger-cycling`** ([plan](.claude/plans/stage8-retrigger-cycling.md))
+  - Embrace cosmic-comp's keybinding re-trigger behaviour (every held `Alt+Tab` re-invokes the script rather than reaching our surface): each `SIGUSR1` summons-on-previous-window or, if already shown, cycles forward; `SIGUSR2` (via `--back`) summons-on-least-recent or cycles backward. Initial highlight moves from MRU index 0 → 1 to match standard Alt+Tab muscle memory. In-app `Tab` / `Shift+Tab` fallback retained.
+  - Merged into `main` at `97312ce`.
+
+- **Stage 9 — `f/stage9-window-activation`** ([plan](.claude/plans/stage9-window-activation.md))
+  - Actually switch windows. Adds a reverse `calloop::channel` from the app thread into the Wayland listener thread, wires up `ToplevelManagerState` + `SeatState`, and activates the highlighted window's `cosmic_toplevel` per seat. Alt-release and `Enter` commit (activate + hide); `Esc` cancels.
+  - Merged into `main` at `23bdc28`.
+
+- **Stage 10 — `f/stage10-autosize-overlay`** ([plan](.claude/plans/stage10-autosize-overlay.md))
+  - Size the overlay to its content instead of a fixed 600×400: `size: None` wrapped in libcosmic's `autosize` widget with `Shrink`/`Fixed` content (the old `Length::Fill` content was why the earlier `size: None` attempt noted under Stage 4 left the surface unmapped). The window list is capped at 80% of the smallest monitor's logical height — surfaced out of the Wayland thread's `OutputState` — scrolling only past that. Also outlines the surface with the theme's active window hint (`window_hint`, falling back to the accent colour).
+  - Merged into `main` at `197c84c`.
+
 ### Abandoned / cancelled
 
 - **Stage 2 v1 — `f/sort-windows`** ([plan](.claude/plans/stage2-sort-by-last-focused.md))
