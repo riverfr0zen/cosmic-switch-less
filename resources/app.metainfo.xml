@@ -1,15 +1,20 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="UTF-8" ?>
 <component type="desktop-application">
   <id>com.github.riverfr0zen.cosmic-switch-less</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MPL-2.0</project_license>
   <name>Cosmic Switch Less</name>
-  <summary>An alternative app switcher for COSMIC Desktop limited to windows on the current workspace</summary>
+  <summary
+    >An alternative app switcher for COSMIC Desktop that only shows windows on the *current* workspace.</summary>
   <icon type="remote" width="64" height="64" scale="1">
     https://github.com/riverfr0zen/cosmic-switch-less/raw/main/resources/icons/hicolor/scalable/apps/icon.svg
   </icon>
-  <url type="vcs-browser">https://github.com/riverfr0zen/cosmic-switch-less</url>
-  <launchable type="desktop-id">com.github.riverfr0zen.cosmic-switch-less.desktop</launchable>
+  <url
+        type="vcs-browser"
+    >https://github.com/riverfr0zen/cosmic-switch-less</url>
+  <launchable
+        type="desktop-id"
+    >com.github.riverfr0zen.cosmic-switch-less.desktop</launchable>
   <provides>
     <id>com.github.riverfr0zen.cosmic-switch-less</id>
     <binaries>

@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=Cosmic Switch Less
-Comment=An alternative app switcher for COSMIC Desktop limited to windows on the current workspace
+Comment=An alternative app switcher for COSMIC Desktop that only shows windows on the current workspace.
 Type=Application
 Icon=com.github.riverfr0zen.cosmic-switch-less
 Exec=cosmic-switch-less %F
