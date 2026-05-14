@@ -15,7 +15,18 @@ use cosmic::widget::{self, icon};
 use freedesktop_desktop_entry as fde;
 use freedesktop_desktop_entry::DesktopEntry;
 use std::path::PathBuf;
+use std::sync::LazyLock;
 use tokio::signal::unix::{SignalKind, signal};
+
+static AUTOSIZE_ID: LazyLock<cosmic::widget::Id> =
+    LazyLock::new(|| cosmic::widget::Id::new("cosmic-app-switcher-autosize"));
+const OVERLAY_WIDTH: f32 = 600.0;
+const SCREEN_HEIGHT_FRACTION: f32 = 0.8;
+/// Header + paddings + column spacing, subtracted from the screen-fraction so
+/// the *total* overlay (not just the list) stays within the fraction.
+const OVERLAY_CHROME_HEIGHT: f32 = 96.0;
+/// Used until the first `ScreenHeight` event arrives.
+const DEFAULT_MAX_LIST_HEIGHT: f32 = 600.0;
 
 pub struct AppModel {
     core: cosmic::Core,
@@ -26,6 +37,7 @@ pub struct AppModel {
     shown: bool,
     highlighted_index: usize,
     wayland: Option<crate::wayland::WaylandHandle>,
+    max_list_height: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -33,6 +45,8 @@ pub enum Message {
     /// One-time handle for sending commands back into the Wayland thread.
     WaylandReady(crate::wayland::WaylandHandle),
     WindowsUpdated(Vec<crate::wayland::WindowInfo>),
+    /// Logical height of the smallest connected monitor, in pixels.
+    ScreenHeight(u32),
     /// Commit the selection: activate the highlighted window, then hide.
     Confirm,
     /// Dismiss the overlay without switching.
@@ -83,6 +97,7 @@ impl cosmic::Application for AppModel {
             shown: false,
             highlighted_index: 0,
             wayland: None,
+            max_list_height: DEFAULT_MAX_LIST_HEIGHT,
         };
 
         (app, Task::none())
@@ -112,21 +127,23 @@ impl cosmic::Application for AppModel {
             }
         }
 
-        widget::container(
+        let list_section = widget::container(
+            widget::scrollable(list.spacing(space_s)).id(self.scrollable_id.clone()),
+        )
+        .max_height(self.max_list_height);
+
+        let content = widget::container(
             widget::column::with_capacity(2)
                 .push(header)
-                .push(
-                    widget::scrollable(list.spacing(space_s))
-                        .id(self.scrollable_id.clone())
-                        .height(Length::Fill),
-                )
-                .spacing(space_s),
+                .push(list_section)
+                .spacing(space_s)
+                .width(Length::Fixed(OVERLAY_WIDTH))
+                .height(Length::Shrink),
         )
         .padding(space_s)
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .class(cosmic::theme::Container::Background)
-        .into()
+        .class(cosmic::theme::Container::Background);
+
+        cosmic::widget::autosize::autosize(content, AUTOSIZE_ID.clone()).into()
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {
@@ -136,6 +153,7 @@ impl cosmic::Application for AppModel {
                 crate::wayland::WaylandEvent::Windows(windows) => {
                     Message::WindowsUpdated(windows)
                 }
+                crate::wayland::WaylandEvent::ScreenHeight(h) => Message::ScreenHeight(h),
             }),
             signals_subscription(),
             listen_raw(|event, _status, _id| match event {
@@ -177,6 +195,11 @@ impl cosmic::Application for AppModel {
                 self.highlighted_index = self
                     .highlighted_index
                     .min(self.windows.len().saturating_sub(1));
+            }
+            #[allow(clippy::cast_precision_loss)]
+            Message::ScreenHeight(h) => {
+                self.max_list_height =
+                    (h as f32 * SCREEN_HEIGHT_FRACTION - OVERLAY_CHROME_HEIGHT).max(120.0);
             }
             Message::Confirm => {
                 if self.shown {
@@ -254,8 +277,11 @@ impl AppModel {
             keyboard_interactivity: KeyboardInteractivity::Exclusive,
             anchor: Anchor::empty(),
             namespace: "cosmic-app-switcher".into(),
-            size: Some((Some(600), Some(400))),
-            size_limits: Limits::NONE.min_width(1.0).min_height(1.0),
+            size: None,
+            size_limits: Limits::NONE
+                .min_width(1.0)
+                .min_height(1.0)
+                .max_width(OVERLAY_WIDTH),
             exclusive_zone: -1,
             ..Default::default()
         });

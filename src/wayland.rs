@@ -52,11 +52,20 @@ impl WaylandHandle {
 }
 
 /// Items delivered by the Wayland subscription: a one-time `Ready` carrying the
-/// command handle, followed by `Windows` updates.
+/// command handle, followed by `Windows` and `ScreenHeight` updates.
 #[derive(Clone, Debug)]
 pub enum WaylandEvent {
     Ready(WaylandHandle),
     Windows(Vec<WindowInfo>),
+    /// Logical height of the smallest connected monitor, in pixels.
+    ScreenHeight(u32),
+}
+
+/// Messages the listener thread sends over the internal channel to the
+/// subscription bridge.
+enum ThreadEvent {
+    Windows(Vec<WindowInfo>),
+    ScreenHeight(u32),
 }
 
 struct WaylandState {
@@ -66,7 +75,7 @@ struct WaylandState {
     toplevel_manager_state: ToplevelManagerState,
     seat_state: SeatState,
     workspace_state: WorkspaceState,
-    sender: mpsc::Sender<Vec<WindowInfo>>,
+    sender: mpsc::Sender<ThreadEvent>,
     mru_order: Vec<String>,
 }
 
@@ -128,9 +137,32 @@ impl WaylandState {
             .collect();
 
         windows.sort_by_key(|(r, _)| *r);
-        let _ = self
-            .sender
-            .blocking_send(windows.into_iter().map(|(_, w)| w).collect());
+        let _ = self.sender.blocking_send(ThreadEvent::Windows(
+            windows.into_iter().map(|(_, w)| w).collect(),
+        ));
+    }
+
+    fn emit_screen_height(&self) {
+        let min_height = self
+            .output_state
+            .outputs()
+            .filter_map(|o| self.output_state.info(&o))
+            .filter_map(|info| {
+                info.logical_size
+                    .map(|(_, h)| u32::try_from(h).unwrap_or(0))
+                    .or_else(|| {
+                        info.modes
+                            .iter()
+                            .find(|m| m.current)
+                            .map(|m| u32::try_from(m.dimensions.1).unwrap_or(0))
+                            .map(|h| h / u32::try_from(info.scale_factor.max(1)).unwrap_or(1))
+                    })
+            })
+            .filter(|h| *h > 0)
+            .min();
+        if let Some(h) = min_height {
+            let _ = self.sender.blocking_send(ThreadEvent::ScreenHeight(h));
+        }
     }
 
     fn activate_by_identifier(&self, identifier: &str) {
@@ -154,9 +186,14 @@ impl OutputHandler for WaylandState {
     fn output_state(&mut self) -> &mut OutputState {
         &mut self.output_state
     }
-    fn new_output(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_output::WlOutput) {}
-    fn update_output(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_output::WlOutput) {}
+    fn new_output(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_output::WlOutput) {
+        self.emit_screen_height();
+    }
+    fn update_output(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_output::WlOutput) {
+        self.emit_screen_height();
+    }
     fn output_destroyed(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_output::WlOutput) {
+        self.emit_screen_height();
     }
 }
 
@@ -262,7 +299,7 @@ cctk::delegate_toplevel_manager!(WaylandState);
 cctk::delegate_workspace!(WaylandState);
 
 fn run_wayland_thread(
-    sender: mpsc::Sender<Vec<WindowInfo>>,
+    sender: mpsc::Sender<ThreadEvent>,
     calloop_rx: calloop::channel::Channel<WaylandRequest>,
 ) {
     let conn = match Connection::connect_to_env() {
@@ -333,14 +370,18 @@ pub fn subscribe() -> Subscription<WaylandEvent> {
         cosmic::iced::stream::channel(
             64,
             |mut output: cosmic::iced::futures::channel::mpsc::Sender<WaylandEvent>| async move {
-                let (tx, mut rx) = mpsc::channel::<Vec<WindowInfo>>(64);
+                let (tx, mut rx) = mpsc::channel::<ThreadEvent>(64);
                 let (calloop_tx, calloop_rx) = calloop::channel::channel::<WaylandRequest>();
                 let _ = output
                     .send(WaylandEvent::Ready(WaylandHandle(calloop_tx)))
                     .await;
                 std::thread::spawn(move || run_wayland_thread(tx, calloop_rx));
-                while let Some(windows) = rx.recv().await {
-                    let _ = output.send(WaylandEvent::Windows(windows)).await;
+                while let Some(event) = rx.recv().await {
+                    let mapped = match event {
+                        ThreadEvent::Windows(windows) => WaylandEvent::Windows(windows),
+                        ThreadEvent::ScreenHeight(h) => WaylandEvent::ScreenHeight(h),
+                    };
+                    let _ = output.send(mapped).await;
                 }
             },
         )
