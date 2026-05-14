@@ -103,10 +103,10 @@ tag version:
 
 # Bundle release tarball
 [working-directory('target/release')]
-bundle-release version:
+bundle-release version arch:
     rm -rf {{ name }}-{{ version }}
-    rm -rf {{ name }}-{{ version }}.tgz
-    mkdir {{ name }}-{{ version }}
-    cp cosmic-switch-less {{ name }}-{{ version }}/
-    cp ../../scripts/* {{ name }}-{{ version }}/
-    tar czvf {{ name }}-{{ version }}.tgz {{ name }}-{{ version }}
+    rm -rf {{ name }}-{{ version }}.{{ arch }}.tgz
+    mkdir {{ name }}-{{ version }}.{{ arch }}
+    cp cosmic-switch-less {{ name }}-{{ version }}.{{ arch }}/
+    cp ../../scripts/* {{ name }}-{{ version }}.{{ arch }}/
+    tar czvf {{ name }}-{{ version }}.{{ arch }}.tgz {{ name }}-{{ version }}.{{ arch }}
