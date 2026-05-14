@@ -25,12 +25,18 @@ pub struct AppModel {
     desktop_entries: Vec<DesktopEntry>,
     shown: bool,
     highlighted_index: usize,
+    wayland: Option<crate::wayland::WaylandHandle>,
 }
 
 #[derive(Debug, Clone)]
 pub enum Message {
+    /// One-time handle for sending commands back into the Wayland thread.
+    WaylandReady(crate::wayland::WaylandHandle),
     WindowsUpdated(Vec<crate::wayland::WindowInfo>),
-    Hide,
+    /// Commit the selection: activate the highlighted window, then hide.
+    Confirm,
+    /// Dismiss the overlay without switching.
+    Cancel,
     /// Forward summon-or-cycle. If hidden, summon with the previous window
     /// (MRU index 1) highlighted; if shown, advance the highlight by one.
     CycleNext,
@@ -76,6 +82,7 @@ impl cosmic::Application for AppModel {
             desktop_entries,
             shown: false,
             highlighted_index: 0,
+            wayland: None,
         };
 
         (app, Task::none())
@@ -124,7 +131,12 @@ impl cosmic::Application for AppModel {
 
     fn subscription(&self) -> Subscription<Self::Message> {
         Subscription::batch(vec![
-            crate::wayland::subscribe().map(Message::WindowsUpdated),
+            crate::wayland::subscribe().map(|event| match event {
+                crate::wayland::WaylandEvent::Ready(handle) => Message::WaylandReady(handle),
+                crate::wayland::WaylandEvent::Windows(windows) => {
+                    Message::WindowsUpdated(windows)
+                }
+            }),
             signals_subscription(),
             listen_raw(|event, _status, _id| match event {
                 Event::Keyboard(KeyEvent::KeyPressed {
@@ -138,14 +150,18 @@ impl cosmic::Application for AppModel {
                 }),
                 Event::Keyboard(
                     KeyEvent::KeyPressed {
-                        key: Key::Named(Named::Escape),
+                        key: Key::Named(Named::Enter),
                         ..
                     }
                     | KeyEvent::KeyReleased {
                         key: Key::Named(Named::Alt),
                         ..
                     },
-                ) => Some(Message::Hide),
+                ) => Some(Message::Confirm),
+                Event::Keyboard(KeyEvent::KeyPressed {
+                    key: Key::Named(Named::Escape),
+                    ..
+                }) => Some(Message::Cancel),
                 _ => None,
             }),
         ])
@@ -153,13 +169,23 @@ impl cosmic::Application for AppModel {
 
     fn update(&mut self, message: Self::Message) -> Task<cosmic::Action<Self::Message>> {
         match message {
+            Message::WaylandReady(handle) => {
+                self.wayland = Some(handle);
+            }
             Message::WindowsUpdated(windows) => {
                 self.windows = windows;
                 self.highlighted_index = self
                     .highlighted_index
                     .min(self.windows.len().saturating_sub(1));
             }
-            Message::Hide => {
+            Message::Confirm => {
+                if self.shown {
+                    self.activate_highlighted();
+                    self.shown = false;
+                    return destroy_layer_surface(self.window_id);
+                }
+            }
+            Message::Cancel => {
                 if self.shown {
                     self.shown = false;
                     return destroy_layer_surface(self.window_id);
@@ -248,6 +274,14 @@ impl AppModel {
             |()| cosmic::Action::App(Message::SyncScroll),
         );
         Task::batch([surface, deferred])
+    }
+
+    fn activate_highlighted(&self) {
+        if let (Some(handle), Some(window)) =
+            (self.wayland.as_ref(), self.windows.get(self.highlighted_index))
+        {
+            handle.activate(window.identifier.clone());
+        }
     }
 
     fn scroll_to_highlighted(&self) -> Task<cosmic::Action<Message>> {

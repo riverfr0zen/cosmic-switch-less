@@ -6,28 +6,65 @@ use calloop::EventLoop;
 use calloop_wayland_source::WaylandSource;
 use cctk::sctk::output::{OutputHandler, OutputState};
 use cctk::sctk::registry::{ProvidesRegistryState, RegistryState};
+use cctk::sctk::seat::{Capability, SeatHandler, SeatState};
 use cctk::toplevel_info::{ToplevelInfoHandler, ToplevelInfoState};
+use cctk::toplevel_management::{ToplevelManagerHandler, ToplevelManagerState};
 use cctk::wayland_client::globals::registry_queue_init;
-use cctk::wayland_client::protocol::wl_output;
-use cctk::wayland_client::{Connection, QueueHandle};
+use cctk::wayland_client::protocol::{wl_output, wl_seat};
+use cctk::wayland_client::{Connection, QueueHandle, WEnum};
 use cctk::wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_handle_v1;
 use cctk::wayland_protocols::ext::workspace::v1::client::ext_workspace_handle_v1;
 use cctk::workspace::{WorkspaceHandler, WorkspaceState};
 use cosmic::iced::Subscription;
 use cosmic::iced::futures::SinkExt;
 use cosmic_protocols::toplevel_info::v1::client::zcosmic_toplevel_handle_v1;
+use cosmic_protocols::toplevel_management::v1::client::zcosmic_toplevel_manager_v1;
 use tokio::sync::mpsc;
 
 #[derive(Clone, Debug)]
 pub struct WindowInfo {
     pub title: String,
     pub app_id: String,
+    pub identifier: String,
+}
+
+/// A command sent from the app thread back into the Wayland listener thread.
+pub enum WaylandRequest {
+    Activate(String),
+}
+
+/// App-side handle for sending [`WaylandRequest`]s into the listener thread.
+/// The manual `Debug` impl exists because `calloop::channel::Sender` is not
+/// `Debug`, but the iced `Message` enum that carries this handle derives it.
+#[derive(Clone)]
+pub struct WaylandHandle(calloop::channel::Sender<WaylandRequest>);
+
+impl std::fmt::Debug for WaylandHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("WaylandHandle")
+    }
+}
+
+impl WaylandHandle {
+    pub fn activate(&self, identifier: String) {
+        let _ = self.0.send(WaylandRequest::Activate(identifier));
+    }
+}
+
+/// Items delivered by the Wayland subscription: a one-time `Ready` carrying the
+/// command handle, followed by `Windows` updates.
+#[derive(Clone, Debug)]
+pub enum WaylandEvent {
+    Ready(WaylandHandle),
+    Windows(Vec<WindowInfo>),
 }
 
 struct WaylandState {
     output_state: OutputState,
     registry_state: RegistryState,
     toplevel_info_state: ToplevelInfoState,
+    toplevel_manager_state: ToplevelManagerState,
+    seat_state: SeatState,
     workspace_state: WorkspaceState,
     sender: mpsc::Sender<Vec<WindowInfo>>,
     mru_order: Vec<String>,
@@ -84,6 +121,7 @@ impl WaylandState {
                     WindowInfo {
                         title: t.title.clone(),
                         app_id: t.app_id.clone(),
+                        identifier: t.identifier.clone(),
                     },
                 )
             })
@@ -93,6 +131,22 @@ impl WaylandState {
         let _ = self
             .sender
             .blocking_send(windows.into_iter().map(|(_, w)| w).collect());
+    }
+
+    fn activate_by_identifier(&self, identifier: &str) {
+        let Some(info) = self
+            .toplevel_info_state
+            .toplevels()
+            .find(|t| t.identifier == identifier)
+        else {
+            return;
+        };
+        let Some(cosmic) = info.cosmic_toplevel.as_ref() else {
+            return;
+        };
+        for seat in self.seat_state.seats() {
+            self.toplevel_manager_state.manager.activate(cosmic, &seat);
+        }
     }
 }
 
@@ -145,6 +199,44 @@ impl ToplevelInfoHandler for WaylandState {
     }
 }
 
+impl ToplevelManagerHandler for WaylandState {
+    fn toplevel_manager_state(&mut self) -> &mut ToplevelManagerState {
+        &mut self.toplevel_manager_state
+    }
+
+    fn capabilities(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: Vec<WEnum<zcosmic_toplevel_manager_v1::ZcosmicToplelevelManagementCapabilitiesV1>>,
+    ) {
+    }
+}
+
+impl SeatHandler for WaylandState {
+    fn seat_state(&mut self) -> &mut SeatState {
+        &mut self.seat_state
+    }
+    fn new_seat(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_seat::WlSeat) {}
+    fn new_capability(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: wl_seat::WlSeat,
+        _: Capability,
+    ) {
+    }
+    fn remove_capability(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: wl_seat::WlSeat,
+        _: Capability,
+    ) {
+    }
+    fn remove_seat(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_seat::WlSeat) {}
+}
+
 impl WorkspaceHandler for WaylandState {
     fn workspace_state(&mut self) -> &mut WorkspaceState {
         &mut self.workspace_state
@@ -159,15 +251,20 @@ impl ProvidesRegistryState for WaylandState {
     fn registry(&mut self) -> &mut RegistryState {
         &mut self.registry_state
     }
-    cctk::sctk::registry_handlers!(OutputState);
+    cctk::sctk::registry_handlers!(OutputState, SeatState);
 }
 
 cctk::sctk::delegate_output!(WaylandState);
 cctk::sctk::delegate_registry!(WaylandState);
+cctk::sctk::delegate_seat!(WaylandState);
 cctk::delegate_toplevel_info!(WaylandState);
+cctk::delegate_toplevel_manager!(WaylandState);
 cctk::delegate_workspace!(WaylandState);
 
-fn run_wayland_thread(sender: mpsc::Sender<Vec<WindowInfo>>) {
+fn run_wayland_thread(
+    sender: mpsc::Sender<Vec<WindowInfo>>,
+    calloop_rx: calloop::channel::Channel<WaylandRequest>,
+) {
     let conn = match Connection::connect_to_env() {
         Ok(c) => c,
         Err(e) => {
@@ -189,6 +286,8 @@ fn run_wayland_thread(sender: mpsc::Sender<Vec<WindowInfo>>) {
     let mut state = WaylandState {
         output_state: OutputState::new(&globals, &qh),
         toplevel_info_state: ToplevelInfoState::new(&registry_state, &qh),
+        toplevel_manager_state: ToplevelManagerState::new(&registry_state, &qh),
+        seat_state: SeatState::new(&globals, &qh),
         workspace_state: WorkspaceState::new(&registry_state, &qh),
         registry_state,
         sender,
@@ -203,6 +302,20 @@ fn run_wayland_thread(sender: mpsc::Sender<Vec<WindowInfo>>) {
         }
     };
 
+    // Clone the connection before `WaylandSource` consumes it, so the request
+    // handler can flush activate requests immediately — the app hides right
+    // after committing, so we can't rely on a later dispatch cycle to flush.
+    let flush_conn = conn.clone();
+    if let Err(e) = event_loop.handle().insert_source(calloop_rx, move |event, (), state| {
+        if let calloop::channel::Event::Msg(WaylandRequest::Activate(id)) = event {
+            state.activate_by_identifier(&id);
+            let _ = flush_conn.flush();
+        }
+    }) {
+        eprintln!("wayland: failed to insert request channel into event loop: {e}");
+        return;
+    }
+
     if let Err(e) = WaylandSource::new(conn, event_queue).insert(event_loop.handle()) {
         eprintln!("wayland: failed to insert wayland source into event loop: {e}");
         return;
@@ -215,15 +328,19 @@ fn run_wayland_thread(sender: mpsc::Sender<Vec<WindowInfo>>) {
     }
 }
 
-pub fn subscribe() -> Subscription<Vec<WindowInfo>> {
+pub fn subscribe() -> Subscription<WaylandEvent> {
     Subscription::run(|| {
         cosmic::iced::stream::channel(
             64,
-            |mut output: cosmic::iced::futures::channel::mpsc::Sender<Vec<WindowInfo>>| async move {
+            |mut output: cosmic::iced::futures::channel::mpsc::Sender<WaylandEvent>| async move {
                 let (tx, mut rx) = mpsc::channel::<Vec<WindowInfo>>(64);
-                std::thread::spawn(move || run_wayland_thread(tx));
+                let (calloop_tx, calloop_rx) = calloop::channel::channel::<WaylandRequest>();
+                let _ = output
+                    .send(WaylandEvent::Ready(WaylandHandle(calloop_tx)))
+                    .await;
+                std::thread::spawn(move || run_wayland_thread(tx, calloop_rx));
                 while let Some(windows) = rx.recv().await {
-                    let _ = output.send(windows).await;
+                    let _ = output.send(WaylandEvent::Windows(windows)).await;
                 }
             },
         )
