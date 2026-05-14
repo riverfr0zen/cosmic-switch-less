@@ -128,10 +128,10 @@ Each stage of work has a plan file in `.claude/plans/` and (where it produced co
 
 ### Abandoned / cancelled
 
-- **Stage 2 v1 — `f/sort-windows`** ([plan](.claude/plans/stage2-sort-by-last-focused.md))
+- **Stage 2 v1 — `f/sort-windows`** ([plan](.claude/plans/abandoned/stage2-sort-by-last-focused.md))
   - First attempt at MRU sorting: maintain `HashMap<String, Instant>` keyed by toplevel identifier, timestamp updated by scanning `toplevels()` inside `emit_window_list` for the "newly activated" entry.
   - **Failure mode:** every toplevel state event re-delivers the full state set. When the currently-active window's title (or any other field) changed, its state still contained `Activated`, so the "first activated whose identifier differs from `prev_activated`" heuristic kept reassigning timestamps based on creation-order iteration. Non-focused windows drifted to the top; "fixes" only nudged them down by one position. Replaced by stage 2 v2.
 
-- **Stage 3 — `f/stage3-exclude-self`** ([cancellation note](.claude/plans/stage3-exclude-self-cancelled.md))
+- **Stage 3 — `f/stage3-exclude-self`** ([cancellation note](.claude/plans/abandoned/stage3-exclude-self-cancelled.md))
   - Was going to filter the switcher's own window out of the listing (by `app_id != Self::APP_ID`).
   - **Cancelled** because layer-shell surfaces are not enumerated by `ext_foreign_toplevel_list_v1` (the protocol cctk builds on). Once stage 4 landed, the switcher's own surface stopped appearing in `toplevel_info_state.toplevels()` and any self-exclusion filter became dead code from day one. Branch exists but contains no functional commits.

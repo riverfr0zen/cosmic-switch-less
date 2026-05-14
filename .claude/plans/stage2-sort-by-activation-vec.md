@@ -178,5 +178,5 @@ Step 6 is the canary for the timestamp-based v1 failure mode.
 - Shipping COSMIC Alt+Tab MRU logic: `pop-os/launcher` → `plugins/src/cosmic_toplevel/mod.rs:73-87`
 - `cosmic-launcher` view-side reversal: `pop-os/cosmic-launcher` → `src/app.rs:518-530`
 - Stage 1 baseline: `src/wayland.rs` on `main`
-- Previous failed plan: `.claude/plans/stage2-sort-by-last-focused.md`
+- Previous failed plan: `.claude/plans/abandoned/stage2-sort-by-last-focused.md`
 - Previous failed branch: `f/sort-windows` (commits `21111ad`, `7a12a9a`, `b7b5ad2`)

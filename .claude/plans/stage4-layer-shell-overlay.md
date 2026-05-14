@@ -150,4 +150,4 @@ No changes expected in `src/wayland.rs`, `src/config.rs`, `src/i18n.rs`.
   - `hide()` calling `destroy_layer_surface(self.window_id)`
   - `view_window(id)` routing by surface id
 - libcosmic types: `cosmic::iced::platform_specific::shell::commands::layer_surface::*`, `cosmic::iced::platform_specific::runtime::wayland::layer_surface::SctkLayerSurfaceSettings`.
-- Cancelled stage 3 context: `.claude/plans/stage3-exclude-self-cancelled.md`.
+- Cancelled stage 3 context: `.claude/plans/abandoned/stage3-exclude-self-cancelled.md`.
