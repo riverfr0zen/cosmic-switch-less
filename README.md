@@ -20,6 +20,10 @@ While the overlay is up:
 
 ## Building
 
+Before building, you will probably have to install [libcosmic dev dependencies](https://github.com/pop-os/libcosmic/#dependencies).
+
+Building:
+
 ```sh
 just build-release   # release binary at ./target/release/cosmic-app-switcher
 just check           # clippy with pedantic warnings
@@ -49,7 +53,7 @@ kill $(pidof cosmic-app-switcher)
 tail -f /tmp/cosmic-app-switcher.log
 ```
 
-## End-user setup (installed)
+## End-user experience (installed + keybindings in cosmic-comp)
 
 1. `sudo just install` — installs `cosmic-app-switcher` and `cosmic-app-switcher-show` to `/usr/bin/`.
 2. In *COSMIC Settings → Input → Keyboard → Shortcuts → Custom shortcuts*, add the primary binding:
