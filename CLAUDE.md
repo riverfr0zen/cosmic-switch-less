@@ -45,11 +45,6 @@ The app follows the elm-style architecture that iced imposes:
   - `subscription()` — declares long-running background streams (e.g. the per-second ticker, config file watcher).
   - `header_start()` / `nav_model()` / `context_drawer()` — COSMIC shell integration points.
 - **`src/config.rs`** — `Config` struct derived with `CosmicConfigEntry`; persisted via `cosmic-config` (XDG). Bump `#[version = N]` when adding fields to trigger migration.
-- **`src/i18n.rs`** — loads Fluent translations embedded at compile time via `rust-embed`. The `fl!("message-id")` macro (and `fl!("message-id", key = val)` for parameterized strings) is available everywhere via `use crate::fl`.
-
-### Localization
-
-Fluent `.ftl` files live in `i18n/<lang>/cosmic_switch_less.ftl`. English (`i18n/en/`) is the fallback defined in `i18n.toml`. Add a new language by copying the `en` directory and renaming it to the ISO 639-1 code.
 
 ### Packaging
 
