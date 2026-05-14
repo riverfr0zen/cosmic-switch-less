@@ -141,7 +141,22 @@ impl cosmic::Application for AppModel {
                 .height(Length::Shrink),
         )
         .padding(space_s)
-        .class(cosmic::theme::Container::Background);
+        .class(cosmic::theme::Container::custom(|theme| {
+            // Reuse the standard background style, then add an outline matching
+            // cosmic-comp's active window hint: `window_hint` colour if the
+            // theme sets one, otherwise the accent colour.
+            let cosmic = theme.cosmic();
+            let mut style = cosmic::theme::Container::background(cosmic);
+            let hint = cosmic.window_hint.map_or_else(
+                || cosmic.accent_color(),
+                cosmic::cosmic_theme::palette::Srgba::from,
+            );
+            #[allow(clippy::cast_precision_loss)]
+            let width = cosmic.active_hint as f32;
+            style.border.color = hint.into();
+            style.border.width = width;
+            style
+        }));
 
         cosmic::widget::autosize::autosize(content, AUTOSIZE_ID.clone()).into()
     }
