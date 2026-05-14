@@ -6,7 +6,7 @@ This project was scaffolded from [cosmic-app-template](https://github.com/pop-os
 
 ## Local research materials
 
-Reference source for the COSMIC ecosystem is checked out locally at `/home/irf/tmp/cosmic-research/` — currently `cosmic-comp`, `cosmic-settings-daemon`, `cosmic-launcher`, and `pop-launcher`. **Look there before asking to download or fetch any COSMIC-related materials.** When you do download new reference material, save it into that folder so it's available next time.
+Reference source for the COSMIC ecosystem is checked out locally at `./cosmic-research/` — currently `cosmic-comp`, `cosmic-settings-daemon`, `cosmic-launcher`, and `pop-launcher`. **Look there before asking to download or fetch any COSMIC-related materials.** When you do download new reference material, save it into that folder so it's available next time.
 
 ## Commands
 

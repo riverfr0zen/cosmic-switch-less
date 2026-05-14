@@ -12,3 +12,7 @@ debian/*
 !debian/install
 !debian/rules
 !debian/source
+
+# ignore research folder
+cosmic-research/*
+!cosmic-research/.gitkeep
