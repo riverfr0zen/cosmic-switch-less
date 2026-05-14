@@ -10,7 +10,7 @@ Reference source for the COSMIC ecosystem is checked out locally at `./cosmic-re
 
 ## Plan to dev workflow
 
-Once the plan is approved, always save the plan locally under `./claude/plans`. 
+Once the plan is approved, always save the plan locally under `.claude/plans/` (abandoned or cancelled plans live in `.claude/plans/abandoned/`).
 
 Plans should be saved in the main branch before beginning development.
 
@@ -30,21 +30,22 @@ just install      # install binary + desktop/appstream/icon files
 just clean        # cargo clean
 ```
 
-No test suite is present in the initial scaffold.
+No test suite is present; verification is manual (each stage's plan file describes how it was tested).
 
 ## Architecture
 
 This is a COSMIC Desktop application written in Rust using [libcosmic](https://github.com/pop-os/libcosmic), which wraps [iced](https://github.com/iced-rs/iced) with COSMIC-specific widgets and conventions.
 
-The app follows the elm-style architecture that iced imposes:
+The app runs as a background daemon that renders its UI as a layer-shell overlay, following the elm-style architecture that iced imposes:
 
-- **`src/main.rs`** — entry point: initializes i18n, configures window size limits, launches the iced runtime with `AppModel`.
-- **`src/app.rs`** — the entire UI and business logic. `AppModel` implements `cosmic::Application`, which requires:
-  - `view()` — renders the current page based on `nav` active selection.
+- **`src/main.rs`** — entry point: builds `cosmic::app::Settings` with `no_main_window(true)` + `exit_on_close(false)` (the daemon has no ordinary window and survives surface destruction) and launches the iced runtime with `AppModel`.
+- **`src/app.rs`** — the entire UI and business logic. `AppModel` implements `cosmic::Application`:
+  - `init()` — sets up state; the overlay surface is created lazily on first summon, not at startup.
+  - `view()` — required by the trait but unused (there is no ordinary window); returns a 1px placeholder.
+  - `view_window()` — renders the layer-shell overlay (the window list). The real UI lives here.
   - `update()` — handles all `Message` variants, mutates state, optionally returns async `Task`s.
-  - `subscription()` — declares long-running background streams (e.g. the per-second ticker, config file watcher).
-  - `header_start()` / `nav_model()` / `context_drawer()` — COSMIC shell integration points.
-- **`src/config.rs`** — `Config` struct derived with `CosmicConfigEntry`; persisted via `cosmic-config` (XDG). Bump `#[version = N]` when adding fields to trigger migration.
+  - `subscription()` — batches the long-running streams: the `src/wayland.rs` window-list / screen-height subscription, the SIGUSR1/SIGUSR2 signal subscription, and a `listen_raw` keyboard handler (Tab/Shift+Tab cycling, Enter/Esc/Alt-release).
+- **`src/config.rs`** — a `Config` struct deriving `CosmicConfigEntry`, kept as inert scaffolding (`#[allow(dead_code)]`); nothing loads or persists it yet. When config is actually needed, wire it up and bump `#[version = N]` on field changes to trigger migration.
 
 ### Packaging
 
@@ -56,22 +57,23 @@ just rootdir=debian/cosmic-switch-less prefix=/usr install
 
 ### Wayland compositor integration (`src/wayland.rs`)
 
-libcosmic owns its own Wayland connection for the UI. Accessing additional compositor protocols (window list, workspaces) requires a **separate** Wayland connection that runs on a dedicated OS thread with a `calloop` event loop, communicating back to the app via a tokio `mpsc` channel bridged into an iced `Subscription`. See `src/wayland.rs` for the established pattern.
+libcosmic owns its own Wayland connection for the UI. Accessing additional compositor protocols (window list, workspaces, output geometry, toplevel activation) requires a **separate** Wayland connection that runs on a dedicated OS thread with a `calloop` event loop. Two channels bridge the threads: a tokio `mpsc` channel carries events *out* of the listener — a `ThreadEvent` enum (window list and screen height) — bridged into an iced `Subscription`; a `calloop::channel` carries commands *in* (e.g. window-activation requests). See `src/wayland.rs` for the established pattern.
 
 Key crates for this (already in `Cargo.toml`):
-- `cctk` — package alias for `cosmic-client-toolkit`; provides `ToplevelInfoHandler`, `WorkspaceHandler`, and their delegate macros. Use as `cctk::toplevel_info::...` / `cctk::workspace::...` in Rust code.
+- `cctk` — package alias for `cosmic-client-toolkit`; provides `ToplevelInfoHandler`, `ToplevelManagerHandler`, `WorkspaceHandler`, `OutputHandler`, `SeatHandler`, and their delegate macros. Use as `cctk::toplevel_info::...` / `cctk::workspace::...` etc. in Rust code.
 - `calloop` + `calloop-wayland-source` — event loop for the listener thread.
 - `cosmic-protocols` — lower-level generated bindings; usually accessed transitively through `cctk`.
 
 **Known API quirks:**
 - `wayland-scanner` generates bitflag enum constants using `snake_to_camel`, not `SCREAMING_SNAKE_CASE`. For example, `<entry name="active" />` becomes `State::Active`, not `State::ACTIVE`.
-- `cosmic::widget::settings::item::builder(label).description(text)` does **not** implement `IntoListItem` and cannot be passed to `section.add()`. Use the bare `builder(label)` for settings rows, or a plain `widget::text` column for multi-field display.
 - `futures::SinkExt` is not a direct dependency; use `cosmic::iced::futures::SinkExt` instead.
 - When annotating the `stream::channel` closure, the sender type is `cosmic::iced::futures::channel::mpsc::Sender<T>`.
 
-Reference implementations in the COSMIC ecosystem:
-- `cosmic-applets/cosmic-applet-workspaces` — channel + subscription bridge pattern
+Reference implementations elsewhere in the COSMIC ecosystem (not in the local `cosmic-research/` checkout — see the upstream `pop-os` repos):
+- `cosmic-applets` → `cosmic-applet-workspaces` — channel + subscription bridge pattern
 - `cosmic-workspaces-epoch` — full `ToplevelInfoHandler` + `WorkspaceHandler` dispatch example
+
+A longer tutorial walkthrough of the separate-connection pattern lives at `docs/wayland-window-listing.md`.
 
 ## Dependency notes
 
@@ -80,6 +82,8 @@ Reference implementations in the COSMIC ecosystem:
 ## Stage history
 
 Each stage of work has a plan file in `.claude/plans/` and (where it produced code) a feature branch. Feature branches are kept locally even after merge so the history is browsable; `git log --all --graph` shows the full structure.
+
+The project was originally named `cosmic-app-switcher` and was renamed to `cosmic-switch-less` after Stage 10 — older plan files, stage entries, and merge commits still reference the original name.
 
 ### Merged
 
