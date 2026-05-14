@@ -1,35 +1,32 @@
 # Cosmic Switch Less
 
-An alternative app switcher for COSMIC Desktop that only shows windows on the *current* workspace.
+An alternative app switcher for COSMIC Desktop that only shows windows from the *current* workspace.
 
-Rationale: As described in [Github #1777](https://github.com/pop-os/cosmic-epoch/issues/1777), the app launcher shipping with COSMIC provides switching functionality but presents windows across all workspaces. This becomes unwieldy when many apps are running on the desktop. 
+Rationale: As described in [Github #1777](https://github.com/pop-os/cosmic-epoch/issues/1777), the app launcher shipping with COSMIC provides switching functionality but shows windows from across all workspaces. This becomes unwieldy when many apps are running on the desktop. 
 
 **AI Disclosure:** This app was developed with Claude Code through a series of planned iterations. See [AI Usage Notes](#ai-usage-notes) for more details.
 
 # Quick Install from binary
 
-A tarball is provided in [Releases](releases) with a pre-compiled binary for `x86_64`. For other platforms, or if you are getting glibc errors, you will have to [build](#building).
+A tarball is provided in [Releases](https://github.com/riverfr0zen/cosmic-switch-less/releases) with a pre-compiled binary for `x86_64`. For other platforms, or if you are getting glibc errors, you will have to [build](#building).
 
-## Install the binary and launch script
+## Install the binary and the signalling script
 
-1. Download the latest tarball from [Releases](releases)
-2. Unpack and access the `cosmic-switch-less` folder
-3. Run `install.sh` or copy the following files into your path (e.g. `~/.local/bin/`):
+1. Download the latest tarball from [Releases](https://github.com/riverfr0zen/cosmic-switch-less/releases)
+2. Unpack and access the `cosmic-switch-less-<version>` folder
+3. Run `install.sh` -OR- copy the following files into your PATH (e.g. `~/.local/bin/`):
     - `cosmic-switch-less`
     - `cosmic-switch-less-show`
 
 ## Add keybindings in COSMIC Settings
 
-<!--**NOTE:** Before adding keybindings, first check that they aren't already in use. For example, `Alt+Tab` may already be assigned to -->
-
-2. First unbind the built-in COSMIC launcher if it has Alt+Tab — otherwise pick another combo (e.g. `Super+Tab`)
-
-1. In *COSMIC Settings → Input → Keyboard → Shortcuts → Custom shortcuts*, add the primary binding:
+1. Open *COSMIC Settings* on your desktop
+2. In *COSMIC Settings → Input → Keyboard → Shortcuts → Custom shortcuts*, add the primary binding:
     - For example: `Alt+Tab` → `cosmic-switch-less-show`
-2. Add a second custom binding for the backward-cycle:
+3. Add a second custom binding for the backward-cycle:
     - For example: `Alt+Shift+Tab` → `cosmic-switch-less-show --back`
-3. (Optional) Add `cosmic-switch-less` to autostart so the daemon is always alive. Otherwise the wrapper cold-starts it on first press, adding ~50–500 ms of latency.
-4. Press `Alt+Tab` — the previously-focused window is highlighted. Keep Alt held and tap Tab repeatedly to walk further back through MRU; tap Shift+Tab to walk forward. Release Alt to hide.
+4. (Optional) Add `cosmic-switch-less` to autostart so the daemon is always alive. Otherwise the wrapper cold-starts it on first press, adding ~50–500 ms of latency.
+5. Press `Alt+Tab` — The switcher overlay should appear. The previously-focused window should be highlighted. Keep Alt held and tap Tab repeatedly to walk further back through MRU; tap Shift+Tab to walk forward. Release Alt to hide.
     - As mentioned in step 3 above, there may be some latency if `cosmic-switch-less` was not already running
 
 
@@ -59,7 +56,7 @@ These aren't topics I'm familiar with. Furthermore, [cosmic-comp](https://github
 
 As someone who's been developing software for more than 25 years, I am of course concerned about and wary of AI slop. My hope here is that process and oversight will minimize it (though of course I may not catch everything).
 
-Each iteration went through a planning process and was developed on a separate branch. All plans are available for review under [.claude/plans](claude/plans). An [iteration history](CLAUDE.md#stage-history) is also kept.
+Each iteration went through a planning process and was developed on a separate branch. All plans are available for review under [.claude/plans](.claude/plans). An [iteration history](CLAUDE.md#stage-history) is also kept.
 
 # Building
 
@@ -100,15 +97,9 @@ tail -f /tmp/cosmic-switch-less.log
 
 # End-user experience from build (install + add keybindings in cosmic-comp)
 
-1. `sudo just install` — installs `cosmic-switch-less` and `cosmic-switch-less-show` to `/usr/bin/`.
-2. In *COSMIC Settings → Input → Keyboard → Shortcuts → Custom shortcuts*, add the primary binding:
-   - `Alt+Tab` → `cosmic-switch-less-show`
+1. `just install-local` — installs `cosmic-switch-less` and `cosmic-switch-less-show` to `~/.local/bin/`.
+2. Add keybindings: Follow the instructions in [Add keybindings in COSMIC Settings](#add-keybindings-in-cosmic-settings)
 
-   First unbind the built-in COSMIC launcher if it has Alt+Tab — otherwise pick another combo (e.g. `Super+Tab`).
-
-   Optionally also bind `Alt+Shift+Tab` → `cosmic-switch-less-show --back`. This is only needed if you want the *first* press of Alt+Shift+Tab to summon directly into backward-cycle mode (overlay opens with the least-recent window highlighted). Without it, you can still cycle backward freely while the overlay is up — the in-app Shift+Tab fallback handles that — you just can't *start* a session that way.
-3. (Optional) Add `cosmic-switch-less` to autostart so the daemon is always alive. Otherwise the wrapper cold-starts it on first press, adding ~50–500 ms of latency.
-4. Press `Alt+Tab` — the previously-focused window is highlighted. Keep Alt held and tap Tab repeatedly to walk further back through MRU; tap Shift+Tab to walk forward. Release Alt to hide.
 
 ## Edge cases worth poking at
 

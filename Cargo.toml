@@ -3,7 +3,7 @@ name = "cosmic-switch-less"
 version = "0.1.0"
 edition = "2024"
 license = "MPL-2.0"
-description = "An alternative app switcher for COSMIC Desktop that only shows windows on the *current* workspace."
+description = "An alternative app switcher for COSMIC Desktop that only shows windows from the *current* workspace."
 repository = "https://github.com/riverfr0zen/cosmic-switch-less"
 
 [dependencies]
