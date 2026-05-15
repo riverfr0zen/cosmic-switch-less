@@ -38,6 +38,7 @@ pub struct AppModel {
     wayland: Option<crate::wayland::WaylandHandle>,
     max_list_height: f32,
     overlay_width: f32,
+    list_icon_size: u16,
     list_font_size: Option<f32>,
 }
 
@@ -102,6 +103,7 @@ impl cosmic::Application for AppModel {
             wayland: None,
             max_list_height: DEFAULT_MAX_LIST_HEIGHT,
             overlay_width: config.overlay_width,
+            list_icon_size: config.list_icon_size,
             list_font_size: config.list_font_size,
         };
 
@@ -375,10 +377,10 @@ impl AppModel {
         let icon_str = self.icon_name_for(&w.app_id);
         let icon_widget: Element<'_, Message> = if icon_str.contains('/') {
             icon::icon(icon::from_path(PathBuf::from(icon_str)))
-                .size(24)
+                .size(self.list_icon_size)
                 .into()
         } else {
-            icon::from_name(icon_str).size(24).into()
+            icon::from_name(icon_str).size(self.list_icon_size).into()
         };
 
         let mut text_widget = widget::text(format!("{} — {}", w.title, w.app_id));

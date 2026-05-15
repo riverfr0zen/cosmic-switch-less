@@ -8,6 +8,7 @@ All notable changes to this project are listed here.
 - User config file (RON) support
 - User-configurable settings:
   - Overlay width override
+  - List item icon size
   - List item font size
 - Config documentation.
 - Arch packaging support in the `justfile` bundle target, plus a license file.
