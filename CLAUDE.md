@@ -125,6 +125,11 @@ The project was originally named `cosmic-app-switcher` and was renamed to `cosmi
   - Size the overlay to its content instead of a fixed 600×400: `size: None` wrapped in libcosmic's `autosize` widget with `Shrink`/`Fixed` content (the old `Length::Fill` content was why the earlier `size: None` attempt noted under Stage 4 left the surface unmapped). The window list is capped at 80% of the smallest monitor's logical height — surfaced out of the Wayland thread's `OutputState` — scrolling only past that. Also outlines the surface with the theme's active window hint (`window_hint`, falling back to the accent colour).
   - Merged into `main` at `197c84c`.
 
+- **Stage 11 — `f/stage11-user-config`** ([plan](.claude/plans/stage11-user-config-overlay-width.md))
+  - First real user configuration. Single RON-formatted settings file at `~/.config/cosmic/com.github.riverfr0zen.cosmic-switch-less/v1/settings`, loaded synchronously in `AppModel::init()`; missing file / parse errors fall back silently to `Config::default()`. Uses libcosmic's `cosmic_config` for path/version conventions but **not** `CosmicConfigEntry` (which writes one file per field) — `serde` added as a direct dep so the struct round-trips through RON with `#[serde(default)]` for forward compatibility. First field is `overlay_width: f32`, replacing the hard-coded `OVERLAY_WIDTH = 600.0`. `install-local` and `scripts/install.sh` seed `resources/default-settings` into `$HOME` idempotently (never clobbers existing user file); the packaging `install` recipe leaves `$HOME` untouched. Both install paths stop a running daemon first to dodge `ETXTBSY`. Ships a `cosmic-switch-less-reload` script since the daemon only reads config at startup (no hot-reload).
+  - Follow-up on `f/font-size-settings` extends the config with a configurable list font size — no plan file; trivial addition on top of the Stage 11 scaffolding.
+  - Merged into `main` at `c536b39` (stage 11) and `30618ba` (font size).
+
 ### Abandoned / cancelled
 
 - **Stage 2 v1 — `f/sort-windows`** ([plan](.claude/plans/abandoned/stage2-sort-by-last-focused.md))

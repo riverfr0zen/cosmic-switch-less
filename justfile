@@ -121,4 +121,5 @@ bundle-release version arch:
     cp cosmic-switch-less {{ name }}-{{ version }}.{{ arch }}/
     cp ../../scripts/* {{ name }}-{{ version }}.{{ arch }}/
     cp ../../resources/default-settings {{ name }}-{{ version }}.{{ arch }}/settings
+    cp ../../LICENSE.txt {{ name }}-{{ version }}.{{ arch }}/
     tar czvf {{ name }}-{{ version }}.{{ arch }}.tgz {{ name }}-{{ version }}.{{ arch }}
