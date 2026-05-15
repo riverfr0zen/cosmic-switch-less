@@ -1,6 +1,6 @@
 [package]
 name = "cosmic-switch-less"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 license = "MPL-2.0"
 description = "An alternative app switcher for COSMIC Desktop that only shows windows from the *current* workspace."
@@ -14,6 +14,7 @@ calloop-wayland-source = "0.4"
 cosmic-protocols = { git = "https://github.com/pop-os/cosmic-protocols", features = ["client"] }
 cctk = { package = "cosmic-client-toolkit", git = "https://github.com/pop-os/cosmic-protocols" }
 freedesktop-desktop-entry = "0.7"
+serde = { version = "1", features = ["derive"] }
 
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Reload cosmic-switch-less config: kill the running daemon (if any) and
+# cold-start a fresh process so the next Alt+Tab is instant.
+
+# pkill -x can't be used: Linux truncates /proc/<pid>/comm to 15 characters,
+# and "cosmic-switch-less" is 18. pidof matches the executable basename
+# correctly via /proc/<pid>/exe.
+
+if pid=$(pidof cosmic-switch-less) && [ -n "$pid" ]; then
+    kill -TERM $pid
+    # Wait briefly for the daemon to exit so the new instance doesn't race
+    # the old one for the Wayland connection or signal subscriptions.
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        sleep 0.05
+        if ! pidof cosmic-switch-less >/dev/null; then
+            break
+        fi
+    done
+fi
+
+setsid -f cosmic-switch-less >/dev/null 2>&1
+exit 0

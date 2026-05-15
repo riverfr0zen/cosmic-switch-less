@@ -22,6 +22,7 @@ base-dir := absolute_path(clean(rootdir / prefix))
 appdata-dst := base-dir / 'share' / 'appdata' / appdata
 bin-dst := base-dir / 'bin' / name
 show-script-dst := base-dir / 'bin' / (name + '-show')
+reload-script-dst := base-dir / 'bin' / (name + '-reload')
 desktop-dst := base-dir / 'share' / 'applications' / desktop
 icons-dst := base-dir / 'share' / 'icons' / 'hicolor'
 icon-svg-dst := icons-dst / 'scalable' / 'apps'
@@ -63,20 +64,30 @@ run *args:
 
 # Installs locally only
 install-local:
+    # Stop the running daemon, if any, so cp can overwrite the binary
+    # (Linux refuses with ETXTBSY otherwise). Next Alt+Tab cold-starts the
+    # fresh binary via cosmic-switch-less-show.
+    if pid=$(pidof cosmic-switch-less); then kill -TERM $pid; for _ in 1 2 3 4 5 6 7 8 9 10; do sleep 0.05; pidof cosmic-switch-less >/dev/null || break; done; fi
     cp target/release/cosmic-switch-less ~/.local/bin/
     cp scripts/cosmic-switch-less-show ~/.local/bin/
+    cp scripts/cosmic-switch-less-reload ~/.local/bin/
+    mkdir -p ~/.config/cosmic/{{ appid }}/v1
+    test -e ~/.config/cosmic/{{ appid }}/v1/settings || cp resources/default-settings ~/.config/cosmic/{{ appid }}/v1/settings
 
-# Installs files
+
+# Installs files (system-wide; does not touch $HOME — packagers handle user
+# config seeding via postinst hooks).
 install:
     install -Dm0755 {{ cargo-target-dir / 'release' / name }} {{ bin-dst }}
     install -Dm0755 {{ 'scripts' / (name + '-show') }} {{ show-script-dst }}
+    install -Dm0755 {{ 'scripts' / (name + '-reload') }} {{ reload-script-dst }}
     install -Dm0644 {{ 'resources' / desktop }} {{ desktop-dst }}
     install -Dm0644 {{ 'resources' / appdata }} {{ appdata-dst }}
     install -Dm0644 {{ 'resources' / 'icons' / 'hicolor' / 'scalable' / 'apps' / 'icon.svg' }} {{ icon-svg-dst }}
 
-# Uninstalls installed files
+# Uninstalls installed files (preserves the user's config directory).
 uninstall:
-    rm {{ bin-dst }} {{ show-script-dst }} {{ desktop-dst }} {{ icon-svg-dst }}
+    rm {{ bin-dst }} {{ show-script-dst }} {{ reload-script-dst }} {{ desktop-dst }} {{ icon-svg-dst }}
 
 # Vendor dependencies locally
 vendor:
@@ -104,9 +115,10 @@ tag version:
 # Bundle release tarball
 [working-directory('target/release')]
 bundle-release version arch:
-    rm -rf {{ name }}-{{ version }}
+    rm -rf {{ name }}-{{ version }}.{{ arch }}
     rm -rf {{ name }}-{{ version }}.{{ arch }}.tgz
     mkdir {{ name }}-{{ version }}.{{ arch }}
     cp cosmic-switch-less {{ name }}-{{ version }}.{{ arch }}/
     cp ../../scripts/* {{ name }}-{{ version }}.{{ arch }}/
+    cp ../../resources/default-settings {{ name }}-{{ version }}.{{ arch }}/settings
     tar czvf {{ name }}-{{ version }}.{{ arch }}.tgz {{ name }}-{{ version }}.{{ arch }}
