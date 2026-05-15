@@ -72,7 +72,8 @@ install-local:
     cp scripts/cosmic-switch-less-show ~/.local/bin/
     cp scripts/cosmic-switch-less-reload ~/.local/bin/
     mkdir -p ~/.config/cosmic/{{ appid }}/v1
-    test -e ~/.config/cosmic/{{ appid }}/v1/settings || printf '// All settings for cosmic-switch-less.\n// Edit values then run `cosmic-switch-less-reload` to apply.\n(\n    // Width of the overlay in pixels.\n    overlay_width: 600.0,\n)\n' > ~/.config/cosmic/{{ appid }}/v1/settings
+    test -e ~/.config/cosmic/{{ appid }}/v1/settings || cp resources/default-settings ~/.config/cosmic/{{ appid }}/v1/settings
+
 
 # Installs files (system-wide; does not touch $HOME — packagers handle user
 # config seeding via postinst hooks).
@@ -114,9 +115,10 @@ tag version:
 # Bundle release tarball
 [working-directory('target/release')]
 bundle-release version arch:
-    rm -rf {{ name }}-{{ version }}
+    rm -rf {{ name }}-{{ version }}.{{ arch }}
     rm -rf {{ name }}-{{ version }}.{{ arch }}.tgz
     mkdir {{ name }}-{{ version }}.{{ arch }}
     cp cosmic-switch-less {{ name }}-{{ version }}.{{ arch }}/
     cp ../../scripts/* {{ name }}-{{ version }}.{{ arch }}/
+    cp ../../resources/default-settings {{ name }}-{{ version }}.{{ arch }}/settings
     tar czvf {{ name }}-{{ version }}.{{ arch }}.tgz {{ name }}-{{ version }}.{{ arch }}

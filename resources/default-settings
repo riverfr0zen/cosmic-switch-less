@@ -1,0 +1,6 @@
+// All settings for cosmic-switch-less.
+// Edit values then run `cosmic-switch-less-reload` to apply.
+(
+    // Width of the overlay in pixels.
+    overlay_width: 600.0,
+)

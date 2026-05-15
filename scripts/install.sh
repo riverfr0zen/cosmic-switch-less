@@ -40,14 +40,7 @@ configdir="$target_home/.config/cosmic/$appid/v1"
 configfile="$configdir/settings"
 if [ ! -e "$configfile" ]; then
     mkdir -p "$configdir"
-    cat > "$configfile" <<'EOF'
-// All settings for cosmic-switch-less.
-// Edit values then run `cosmic-switch-less-reload` to apply.
-(
-    // Width of the overlay in pixels.
-    overlay_width: 600.0,
-)
-EOF
+    cp settings $configfile
     # When running under sudo, hand ownership back to the invoking user so
     # they can edit the file without root.
     if [ -n "${SUDO_USER:-}" ]; then
@@ -60,8 +53,8 @@ echo "  cosmic-switch-less"
 echo "  cosmic-switch-less-show"
 echo "  cosmic-switch-less-reload"
 echo
-echo "Config: $configfile"
-echo "  Edit this file then run cosmic-switch-less-reload to apply."
+echo "Config is at: $configfile"
+echo "  You can make changes to this file and then run cosmic-switch-less-reload to apply."
 
 case ":$PATH:" in
     *":$bindir:"*) ;;
