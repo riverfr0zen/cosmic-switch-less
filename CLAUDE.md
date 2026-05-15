@@ -130,6 +130,10 @@ The project was originally named `cosmic-app-switcher` and was renamed to `cosmi
   - Follow-up on `f/font-size-settings` extends the config with a configurable list font size — no plan file; trivial addition on top of the Stage 11 scaffolding.
   - Merged into `main` at `c536b39` (stage 11) and `30618ba` (font size).
 
+- **Stage 12 — `f/stage12-modifier-snapshot-commit`** ([plan](.claude/plans/stage12-modifier-snapshot-commit.md))
+  - Generalize commit-on-release to work with any keybinding, not just `Alt+Tab`. The previous hardcoded `KeyReleased { Named::Alt }` branch left non-Alt bindings (e.g. `Shift+Down`) stuck open until Enter. Adopts Niri's pattern: snapshot whichever modifiers are held the first time the overlay receives a `ModifiersChanged` event after summon (relying on the Wayland guarantee that `wl_keyboard.modifiers` follows `wl_keyboard.enter`), then commit when any of those flags drops. Snapshot covers all four — Shift/Alt/Ctrl/Super — and is preserved across the Stage 8 retrigger-cycling re-summons. Empty snapshot (no-modifier binding) falls through to Enter-only, no auto-commit. Released as `0.2.1`.
+  - Merged into `main` at `c7c6c67`.
+
 ### Abandoned / cancelled
 
 - **Stage 2 v1 — `f/sort-windows`** ([plan](.claude/plans/abandoned/stage2-sort-by-last-focused.md))

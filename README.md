@@ -27,8 +27,9 @@ A tarball is provided in [Releases](https://github.com/riverfr0zen/cosmic-switch
 3. Add a second custom binding for the backward-cycle:
     - For example: `Alt+Shift+Tab` → `cosmic-switch-less-show --back`
 4. (Optional) Add `cosmic-switch-less` to autostart so the daemon is always alive. Otherwise the wrapper cold-starts it on first press, adding ~50–500 ms of latency.
-5. Press `Alt+Tab` — The switcher overlay should appear. The previously-focused window should be highlighted. Keep Alt held and tap Tab repeatedly to walk further back through MRU; tap Shift+Tab to walk forward. Release Alt to hide.
-    - As mentioned in step 3 above, there may be some latency if `cosmic-switch-less` was not already running
+5. Press `Alt+Tab` — The switcher overlay should appear. The previously-focused window should be highlighted. Keep Alt held and tap Tab repeatedly to walk further back through MRU; tap Shift+Tab to walk forward. Release Alt to commit (the highlighted window is activated and the overlay hides).
+    - If you bound a non-Alt shortcut (e.g. `Shift+Down`), releasing whichever modifier(s) you held — Alt, Shift, Ctrl, or Super — commits the same way. The held modifiers are captured when the overlay first gains keyboard focus, and releasing any of them triggers the commit. For bindings with no modifier (e.g. a plain `F12`), `Enter` is the only commit gesture; `Esc` always cancels.
+    - As mentioned in step 4 above, there may be some latency if `cosmic-switch-less` was not already running.
 
 ## Configuration
 
@@ -53,7 +54,8 @@ The shipped wrapper `cosmic-switch-less-show` sends the right signal: bare invoc
 
 While the overlay is up:
 
-- Releasing `Alt` or pressing `Enter` commits the selection: the highlighted window is activated and the overlay hides.
+- Releasing whichever modifier(s) you held when summoning — Alt, Shift, Ctrl, or Super — commits the selection: the highlighted window is activated and the overlay hides. The held modifiers are snapshotted when the overlay first gains keyboard focus, so the same gesture works for any binding (`Alt+Tab`, `Shift+Down`, `Super+Grave`, etc.); release any one of them to commit.
+- Pressing `Enter` also commits — useful when your binding has no modifier to release (e.g. a plain `F12`).
 - Pressing `Esc` cancels: the overlay hides without switching.
 - Either way the daemon keeps running and can be re-summoned.
 - In-app `Tab` / `Shift+Tab` also cycle the highlight (handy when the overlay was summoned from a terminal rather than a cosmic-comp binding).
@@ -97,7 +99,7 @@ setsid -f ./target/release/cosmic-switch-less >/tmp/cosmic-switch-less.log 2>&1
 
 # 4. Inside the overlay:
 #    - in-app Tab / Shift+Tab        → cycle forward / backward
-#    - release Alt OR press Enter    → activate highlighted window, then hide
+#    - press Enter                   → activate highlighted window, then hide
 #    - press Esc                     → hide without switching
 
 # 5. Stop the daemon when done.
