@@ -3,4 +3,6 @@
 (
     // Width of the overlay in pixels.
     overlay_width: 600.0,
+    // Replace None with Option<f32>, e.g.: Some(16.0)
+    list_font_size: None,
 )

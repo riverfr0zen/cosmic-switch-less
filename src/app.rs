@@ -38,6 +38,7 @@ pub struct AppModel {
     wayland: Option<crate::wayland::WaylandHandle>,
     max_list_height: f32,
     overlay_width: f32,
+    list_font_size: Option<f32>,
 }
 
 #[derive(Debug, Clone)]
@@ -101,6 +102,7 @@ impl cosmic::Application for AppModel {
             wayland: None,
             max_list_height: DEFAULT_MAX_LIST_HEIGHT,
             overlay_width: config.overlay_width,
+            list_font_size: config.list_font_size,
         };
 
         (app, Task::none())
@@ -119,7 +121,7 @@ impl cosmic::Application for AppModel {
         }
 
         let space_s = cosmic::theme::spacing().space_s;
-        let header = widget::text::title3("Open windows on this workspace");
+        let header = widget::text::title4("cosmic-switch-less");
 
         let mut list = widget::column::with_capacity(self.windows.len().max(1));
         if self.windows.is_empty() {
@@ -379,9 +381,13 @@ impl AppModel {
             icon::from_name(icon_str).size(24).into()
         };
 
+        let mut text_widget = widget::text(format!("{} — {}", w.title, w.app_id));
+        if let Some(list_font_size) = self.list_font_size {
+            text_widget = text_widget.size(list_font_size);
+        }
         let row = widget::row::with_capacity(2)
             .push(icon_widget)
-            .push(widget::text(format!("{} — {}", w.title, w.app_id)))
+            .push(text_widget)
             .spacing(spacing)
             .align_y(Alignment::Center);
 
