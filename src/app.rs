@@ -4,7 +4,7 @@ use cosmic::iced::advanced::layout::Limits;
 use cosmic::iced::core::window::Id as SurfaceId;
 use cosmic::iced::event::listen_raw;
 use cosmic::iced::futures::SinkExt;
-use cosmic::iced::keyboard::{Event as KeyEvent, Key, key::Named};
+use cosmic::iced::keyboard::{Event as KeyEvent, Key, Modifiers, key::Named};
 use cosmic::iced::platform_specific::runtime::wayland::layer_surface::SctkLayerSurfaceSettings;
 use cosmic::iced::platform_specific::shell::commands::layer_surface::{
     Anchor, KeyboardInteractivity, destroy_layer_surface, get_layer_surface,
@@ -40,6 +40,13 @@ pub struct AppModel {
     overlay_width: f32,
     list_icon_size: u16,
     list_font_size: Option<f32>,
+    /// Modifiers held when the overlay first received keyboard focus
+    /// after a summon. Release of any flag in this set commits.
+    /// `Some(Modifiers::empty())` after a no-modifier summon → Enter only.
+    summon_modifiers: Option<Modifiers>,
+    /// Set in `summon_with_highlight`, cleared on the next
+    /// `ModifiersChanged` (which captures the snapshot).
+    awaiting_snapshot: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -62,6 +69,10 @@ pub enum Message {
     /// Deferred scroll sync — runs one event-loop tick after a summon so the
     /// scrollable widget has registered its Id with iced's runtime.
     SyncScroll,
+    /// Live keyboard modifier state. The first event after a summon
+    /// captures the snapshot; later events drive the release-to-commit
+    /// check.
+    ModifiersChanged(Modifiers),
 }
 
 impl cosmic::Application for AppModel {
@@ -105,6 +116,8 @@ impl cosmic::Application for AppModel {
             overlay_width: config.overlay_width,
             list_icon_size: config.list_icon_size,
             list_font_size: config.list_font_size,
+            summon_modifiers: None,
+            awaiting_snapshot: false,
         };
 
         (app, Task::none())
@@ -188,20 +201,17 @@ impl cosmic::Application for AppModel {
                 } else {
                     Message::CycleNext
                 }),
-                Event::Keyboard(
-                    KeyEvent::KeyPressed {
-                        key: Key::Named(Named::Enter),
-                        ..
-                    }
-                    | KeyEvent::KeyReleased {
-                        key: Key::Named(Named::Alt),
-                        ..
-                    },
-                ) => Some(Message::Confirm),
+                Event::Keyboard(KeyEvent::KeyPressed {
+                    key: Key::Named(Named::Enter),
+                    ..
+                }) => Some(Message::Confirm),
                 Event::Keyboard(KeyEvent::KeyPressed {
                     key: Key::Named(Named::Escape),
                     ..
                 }) => Some(Message::Cancel),
+                Event::Keyboard(KeyEvent::ModifiersChanged(mods)) => {
+                    Some(Message::ModifiersChanged(mods))
+                }
                 _ => None,
             }),
         ])
@@ -227,13 +237,33 @@ impl cosmic::Application for AppModel {
                 if self.shown {
                     self.activate_highlighted();
                     self.shown = false;
+                    self.summon_modifiers = None;
+                    self.awaiting_snapshot = false;
                     return destroy_layer_surface(self.window_id);
                 }
             }
             Message::Cancel => {
                 if self.shown {
                     self.shown = false;
+                    self.summon_modifiers = None;
+                    self.awaiting_snapshot = false;
                     return destroy_layer_surface(self.window_id);
+                }
+            }
+            Message::ModifiersChanged(mods) => {
+                if self.awaiting_snapshot {
+                    // Wayland guarantees a wl_keyboard.modifiers event right
+                    // after wl_keyboard.enter, so this fires once focus lands.
+                    self.summon_modifiers = Some(mods);
+                    self.awaiting_snapshot = false;
+                } else if let Some(snap) = self.summon_modifiers
+                    && !snap.is_empty()
+                    && ((snap.shift() && !mods.shift())
+                        || (snap.alt() && !mods.alt())
+                        || (snap.control() && !mods.control())
+                        || (snap.logo() && !mods.logo()))
+                {
+                    return self.update(Message::Confirm);
                 }
             }
             Message::SyncScroll => return self.scroll_to_highlighted(),
@@ -293,6 +323,7 @@ impl AppModel {
         scroll_on_summon: bool,
     ) -> Task<cosmic::Action<Message>> {
         self.shown = true;
+        self.awaiting_snapshot = true;
         self.highlighted_index = idx.min(self.windows.len().saturating_sub(1));
         let surface = get_layer_surface(SctkLayerSurfaceSettings {
             id: self.window_id,
