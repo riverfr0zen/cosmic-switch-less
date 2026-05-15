@@ -15,12 +15,14 @@ const KEY: &str = "settings";
 #[serde(default)]
 pub struct Config {
     pub overlay_width: f32,
+    pub list_font_size: Option<f32>,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             overlay_width: 600.0,
+            list_font_size: None,
         }
     }
 }
