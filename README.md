@@ -17,6 +17,7 @@ A tarball is provided in [Releases](https://github.com/riverfr0zen/cosmic-switch
 3. Run `install.sh` -OR- copy the following files into your PATH (e.g. `~/.local/bin/`):
     - `cosmic-switch-less`
     - `cosmic-switch-less-show`
+    - `cosmic-switch-less-reload`
 
 ## Add keybindings in COSMIC Settings
 
@@ -28,6 +29,17 @@ A tarball is provided in [Releases](https://github.com/riverfr0zen/cosmic-switch
 4. (Optional) Add `cosmic-switch-less` to autostart so the daemon is always alive. Otherwise the wrapper cold-starts it on first press, adding ~50–500 ms of latency.
 5. Press `Alt+Tab` — The switcher overlay should appear. The previously-focused window should be highlighted. Keep Alt held and tap Tab repeatedly to walk further back through MRU; tap Shift+Tab to walk forward. Release Alt to hide.
     - As mentioned in step 3 above, there may be some latency if `cosmic-switch-less` was not already running
+
+## Configuration
+
+As of release `0.2.0`, users can configure some settings.
+
+If you ran `install.sh` from the tarball, the configuration file will be at:
+`~/.config/cosmic/com.github.riverfr0zen.cosmic-switch-less/settings`
+
+If you did not, then copy the `settings` file in the tarball to that location.
+
+Modify the `settings` as desired, then run `cosmic-switch-less-reload` to refresh the daemon.
 
 
 # How it works
