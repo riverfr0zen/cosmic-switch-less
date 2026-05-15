@@ -980,7 +980,7 @@ dependencies = [
 
 [[package]]
 name = "cosmic-switch-less"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "calloop",
  "calloop-wayland-source",
@@ -988,6 +988,7 @@ dependencies = [
  "cosmic-protocols 0.2.0 (git+https://github.com/pop-os/cosmic-protocols)",
  "freedesktop-desktop-entry",
  "libcosmic",
+ "serde",
  "tokio",
  "wayland-client",
 ]

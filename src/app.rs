@@ -20,7 +20,6 @@ use tokio::signal::unix::{SignalKind, signal};
 
 static AUTOSIZE_ID: LazyLock<cosmic::widget::Id> =
     LazyLock::new(|| cosmic::widget::Id::new("cosmic-switch-less-autosize"));
-const OVERLAY_WIDTH: f32 = 600.0;
 const SCREEN_HEIGHT_FRACTION: f32 = 0.8;
 /// Header + paddings + column spacing, subtracted from the screen-fraction so
 /// the *total* overlay (not just the list) stays within the fraction.
@@ -38,6 +37,7 @@ pub struct AppModel {
     highlighted_index: usize,
     wayland: Option<crate::wayland::WaylandHandle>,
     max_list_height: f32,
+    overlay_width: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -88,6 +88,8 @@ impl cosmic::Application for AppModel {
             .filter_map(|path| DesktopEntry::from_path(path, Some(&locales)).ok())
             .collect::<Vec<_>>();
 
+        let config = crate::config::Config::load(Self::APP_ID);
+
         let app = AppModel {
             core,
             windows: Vec::new(),
@@ -98,6 +100,7 @@ impl cosmic::Application for AppModel {
             highlighted_index: 0,
             wayland: None,
             max_list_height: DEFAULT_MAX_LIST_HEIGHT,
+            overlay_width: config.overlay_width,
         };
 
         (app, Task::none())
@@ -137,7 +140,7 @@ impl cosmic::Application for AppModel {
                 .push(header)
                 .push(list_section)
                 .spacing(space_s)
-                .width(Length::Fixed(OVERLAY_WIDTH))
+                .width(Length::Fixed(self.overlay_width))
                 .height(Length::Shrink),
         )
         .padding(space_s)
@@ -296,7 +299,7 @@ impl AppModel {
             size_limits: Limits::NONE
                 .min_width(1.0)
                 .min_height(1.0)
-                .max_width(OVERLAY_WIDTH),
+                .max_width(self.overlay_width),
             exclusive_zone: -1,
             ..Default::default()
         });
