@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use calloop::EventLoop;
 use calloop_wayland_source::WaylandSource;
@@ -77,6 +77,14 @@ struct WaylandState {
     workspace_state: WorkspaceState,
     sender: mpsc::Sender<ThreadEvent>,
     mru_order: Vec<String>,
+    /// Last seen `Activated` value per identifier. cosmic-comp delivers
+    /// events for several toplevels in one batch, and a toplevel whose state
+    /// event hasn't been processed yet still reports its *stale* cached
+    /// state (e.g. the just-defocused window still claims `Activated` while
+    /// geometry/title events for it drain). Promoting on every Activated
+    /// sighting therefore re-promotes the previous window above the new one;
+    /// only a false→true transition is a real focus change.
+    activated_last: HashMap<String, bool>,
 }
 
 impl WaylandState {
@@ -88,11 +96,12 @@ impl WaylandState {
             return;
         };
         let id = info.identifier.clone();
-        let pos = self.mru_order.iter().position(|x| x == &id);
-        if info
+        let activated = info
             .state
-            .contains(&zcosmic_toplevel_handle_v1::State::Activated)
-        {
+            .contains(&zcosmic_toplevel_handle_v1::State::Activated);
+        let was = self.activated_last.insert(id.clone(), activated);
+        let pos = self.mru_order.iter().position(|x| x == &id);
+        if activated && was != Some(true) {
             if let Some(p) = pos {
                 self.mru_order.remove(p);
             }
@@ -231,6 +240,7 @@ impl ToplevelInfoHandler for WaylandState {
         if let Some(info) = self.toplevel_info_state.info(handle) {
             let id = info.identifier.clone();
             self.mru_order.retain(|x| x != &id);
+            self.activated_last.remove(&id);
         }
         self.emit_window_list();
     }
@@ -329,6 +339,7 @@ fn run_wayland_thread(
         registry_state,
         sender,
         mru_order: Vec::new(),
+        activated_last: HashMap::new(),
     };
 
     let mut event_loop: EventLoop<WaylandState> = match EventLoop::try_new() {
