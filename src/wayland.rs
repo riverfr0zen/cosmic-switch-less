@@ -3,6 +3,9 @@
 use std::collections::{HashMap, HashSet};
 
 use calloop::EventLoop;
+use calloop::LoopHandle;
+use calloop::timer::{TimeoutAction, Timer};
+use std::time::Duration;
 use calloop_wayland_source::WaylandSource;
 use cctk::sctk::output::{OutputHandler, OutputState};
 use cctk::sctk::registry::{ProvidesRegistryState, RegistryState};
@@ -76,6 +79,7 @@ struct WaylandState {
     seat_state: SeatState,
     workspace_state: WorkspaceState,
     sender: mpsc::Sender<ThreadEvent>,
+    loop_handle: LoopHandle<'static, WaylandState>,
     mru_order: Vec<String>,
     /// Last seen `Activated` value per identifier. cosmic-comp delivers
     /// events for several toplevels in one batch, and a toplevel whose state
@@ -85,7 +89,21 @@ struct WaylandState {
     /// sighting therefore re-promotes the previous window above the new one;
     /// only a false→true transition is a real focus change.
     activated_last: HashMap<String, bool>,
+    /// Debounce for MRU promotion. cosmic-comp sometimes flashes `Activated`
+    /// onto a window for ~150ms without any user action (observed on every
+    /// keybinding-spawned summon when two server-side-decorated windows are
+    /// open: the other one briefly activates, then focus snaps back). A
+    /// window is only promoted once it has HELD `Activated` for
+    /// `PROMOTION_SETTLE`; each false→true transition arms a one-shot timer
+    /// carrying a generation number so a blip that ends (or a newer
+    /// transition) invalidates the older timer.
+    promotion_gen: HashMap<String, u64>,
+    next_gen: u64,
 }
+
+/// How long a window must hold `Activated` before it is promoted in the MRU.
+/// The spurious flashes last ~151ms; real focus dwells comfortably longer.
+const PROMOTION_SETTLE: Duration = Duration::from_millis(300);
 
 impl WaylandState {
     fn note_toplevel_update(
@@ -100,15 +118,40 @@ impl WaylandState {
             .state
             .contains(&zcosmic_toplevel_handle_v1::State::Activated);
         let was = self.activated_last.insert(id.clone(), activated);
-        let pos = self.mru_order.iter().position(|x| x == &id);
         if activated && was != Some(true) {
-            if let Some(p) = pos {
-                self.mru_order.remove(p);
+            self.next_gen += 1;
+            let generation = self.next_gen;
+            self.promotion_gen.insert(id.clone(), generation);
+            let timer_id = id.clone();
+            let _ = self.loop_handle.insert_source(
+                Timer::from_duration(PROMOTION_SETTLE),
+                move |_, (), state| {
+                    state.settle_promotion(&timer_id, generation);
+                    TimeoutAction::Drop
+                },
+            );
+        } else if !activated {
+            self.promotion_gen.remove(&id);
+            if !self.mru_order.contains(&id) {
+                self.mru_order.insert(0, id);
             }
-            self.mru_order.push(id);
-        } else if pos.is_none() {
-            self.mru_order.insert(0, id);
         }
+    }
+
+    /// Promote `id` to most-recent if its activation from this generation
+    /// survived the settle window.
+    fn settle_promotion(&mut self, id: &str, generation: u64) {
+        if self.promotion_gen.get(id) != Some(&generation)
+            || self.activated_last.get(id) != Some(&true)
+        {
+            return;
+        }
+        self.promotion_gen.remove(id);
+        if let Some(p) = self.mru_order.iter().position(|x| x == id) {
+            self.mru_order.remove(p);
+        }
+        self.mru_order.push(id.to_owned());
+        self.emit_window_list();
     }
 
     fn emit_window_list(&self) {
@@ -241,6 +284,7 @@ impl ToplevelInfoHandler for WaylandState {
             let id = info.identifier.clone();
             self.mru_order.retain(|x| x != &id);
             self.activated_last.remove(&id);
+            self.promotion_gen.remove(&id);
         }
         self.emit_window_list();
     }
@@ -329,6 +373,14 @@ fn run_wayland_thread(
     };
     let qh = event_queue.handle();
 
+    let mut event_loop: EventLoop<'static, WaylandState> = match EventLoop::try_new() {
+        Ok(el) => el,
+        Err(e) => {
+            eprintln!("wayland: failed to create event loop: {e}");
+            return;
+        }
+    };
+
     let registry_state = RegistryState::new(&globals);
     let mut state = WaylandState {
         output_state: OutputState::new(&globals, &qh),
@@ -338,16 +390,11 @@ fn run_wayland_thread(
         workspace_state: WorkspaceState::new(&registry_state, &qh),
         registry_state,
         sender,
+        loop_handle: event_loop.handle(),
         mru_order: Vec::new(),
         activated_last: HashMap::new(),
-    };
-
-    let mut event_loop: EventLoop<WaylandState> = match EventLoop::try_new() {
-        Ok(el) => el,
-        Err(e) => {
-            eprintln!("wayland: failed to create event loop: {e}");
-            return;
-        }
+        promotion_gen: HashMap::new(),
+        next_gen: 0,
     };
 
     // Clone the connection before `WaylandSource` consumes it, so the request
