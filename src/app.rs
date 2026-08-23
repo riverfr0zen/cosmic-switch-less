@@ -40,6 +40,10 @@ pub struct AppModel {
     overlay_width: f32,
     list_icon_size: u16,
     list_font_size: Option<f32>,
+    instant_commit_no_modifiers: bool,
+    /// The window last activated by a commit, kept briefly so incoming
+    /// window lists (which lag the debounced MRU) don't demote it.
+    last_committed: Option<(String, std::time::Instant)>,
     /// Modifiers held when the overlay first received keyboard focus
     /// after a summon. Release of any flag in this set commits.
     /// `Some(Modifiers::empty())` after a no-modifier summon → Enter only.
@@ -116,6 +120,8 @@ impl cosmic::Application for AppModel {
             overlay_width: config.overlay_width,
             list_icon_size: config.list_icon_size,
             list_font_size: config.list_font_size,
+            instant_commit_no_modifiers: config.instant_commit_no_modifiers,
+            last_committed: None,
             summon_modifiers: None,
             awaiting_snapshot: false,
         };
@@ -224,6 +230,20 @@ impl cosmic::Application for AppModel {
             }
             Message::WindowsUpdated(windows) => {
                 self.windows = windows;
+                // The wayland thread debounces MRU promotion (~300ms), so a
+                // list emitted right after a commit still has the committed
+                // window at its old rank. Keep it pinned to the top until the
+                // debounced promotion catches up.
+                if let Some((id, at)) = &self.last_committed {
+                    if at.elapsed() < std::time::Duration::from_secs(1) {
+                        if let Some(p) =
+                            self.windows.iter().position(|w| &w.identifier == id)
+                        {
+                            let w = self.windows.remove(p);
+                            self.windows.insert(0, w);
+                        }
+                    }
+                }
                 self.highlighted_index = self
                     .highlighted_index
                     .min(self.windows.len().saturating_sub(1));
@@ -236,6 +256,17 @@ impl cosmic::Application for AppModel {
             Message::Confirm => {
                 if self.shown {
                     self.activate_highlighted();
+                    // Optimistically move the committed window to the top of
+                    // the local list: the compositor's state events take a
+                    // frame or two to round-trip, and a re-summon inside that
+                    // window would otherwise show the pre-switch order (and
+                    // pre-select the window the user is already on).
+                    if self.highlighted_index < self.windows.len() {
+                        let w = self.windows.remove(self.highlighted_index);
+                        self.last_committed =
+                            Some((w.identifier.clone(), std::time::Instant::now()));
+                        self.windows.insert(0, w);
+                    }
                     self.shown = false;
                     self.summon_modifiers = None;
                     self.awaiting_snapshot = false;
@@ -256,6 +287,14 @@ impl cosmic::Application for AppModel {
                     // after wl_keyboard.enter, so this fires once focus lands.
                     self.summon_modifiers = Some(mods);
                     self.awaiting_snapshot = false;
+                    // A very fast tap can release the binding's modifier
+                    // before the overlay wins keyboard focus; the snapshot is
+                    // then empty and no release will ever commit, leaving the
+                    // overlay stuck until Enter/Escape. With this option on,
+                    // treat that as "already released": commit right away.
+                    if mods.is_empty() && self.instant_commit_no_modifiers {
+                        return self.update(Message::Confirm);
+                    }
                 } else if let Some(snap) = self.summon_modifiers
                     && !snap.is_empty()
                     && ((snap.shift() && !mods.shift())

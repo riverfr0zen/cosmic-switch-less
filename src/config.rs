@@ -17,6 +17,11 @@ pub struct Config {
     pub overlay_width: f32,
     pub list_icon_size: u16,
     pub list_font_size: Option<f32>,
+    /// Commit immediately when the overlay gains focus with no modifiers
+    /// held (the binding's modifier was released before focus arrived).
+    /// Keep false for modifier-less bindings like a bare F12, where an
+    /// empty snapshot is normal and Enter is the commit path.
+    pub instant_commit_no_modifiers: bool,
 }
 
 impl Default for Config {
@@ -25,6 +30,7 @@ impl Default for Config {
             overlay_width: 600.0,
             list_icon_size: 24,
             list_font_size: None,
+            instant_commit_no_modifiers: false,
         }
     }
 }
